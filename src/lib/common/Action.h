@@ -48,6 +48,7 @@ public:
     mouseDown,
     mouseUp,
     mousebutton,
+    switchMonitorInput,
   };
   enum class SwitchDirection
   {
@@ -67,6 +68,11 @@ public:
   Action() = default;
 
   QString text() const;
+  QString displayText() const;
+  int monitorIndex = 0;
+  QString monitorSource = "usb-c";
+  QString monitorTool;
+  QString monitorComputer;
 
   void loadSettings(QSettings &settings);
   void saveSettings(QSettings &settings) const;
@@ -111,7 +117,7 @@ private:
   int m_lockCursorMode = static_cast<int>(LockCursorMode::toggle);
   bool m_activeOnRelease = false;
   bool m_hasComputers = false;
-  bool m_restartServer;
+  bool m_restartServer = false;
 
   inline static const QString m_commandTemplate = QStringLiteral("(%1)");
   inline static const QStringList m_actionTypeNames{
@@ -125,7 +131,8 @@ private:
       QStringLiteral("restartServer"),
       QStringLiteral("mouseDown"),
       QStringLiteral("mouseUp"),
-      QStringLiteral("mousebutton")
+      QStringLiteral("mousebutton"),
+      QStringLiteral("switchMonitorInput")
   };
 
   inline static const QStringList m_switchDirectionNames{

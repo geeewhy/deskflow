@@ -15,6 +15,10 @@ class Hotkey;
 class Action;
 class ServerConfig;
 class KeySequenceWidget;
+class QWidget;
+class QSpinBox;
+class QComboBox;
+class QLineEdit;
 
 namespace Ui {
 class ActionDialog;
@@ -54,4 +58,9 @@ private:
   std::unique_ptr<Ui::ActionDialog> ui;
   Hotkey &m_hotkey;
   Action &m_action;
+  QWidget *m_monitorControls = nullptr;
+  QSpinBox *m_monitorIndex = nullptr;
+  QComboBox *m_monitorSource = nullptr;
+  QComboBox *m_monitorComputer = nullptr;
+  QLineEdit *m_monitorTool = nullptr;
 };

@@ -10,6 +10,7 @@
 
 #include "base/IEventQueue.h"
 #include "common/KeyboardModifier.h"
+#include "common/MonitorInput.h"
 #include "deskflow/KeyMap.h"
 #include "deskflow/KeyTypes.h"
 #include "deskflow/OptionTypes.h"
@@ -833,6 +834,20 @@ void Config::parseAction(
                   action = new InputFilter::ModifierAction(mask, ~mask);
           }
   */
+
+  else if (name == "switchMonitorInput") {
+    if (args.size() != 4)
+      throw ServerConfigReadException(s, "syntax for action: switchMonitorInput(index,hdmi1|usb-c,hexToolPath,computer)");
+    bool validIndex = false;
+    const int monitor = QString::fromStdString(args[0]).toInt(&validIndex);
+    const auto tool = MonitorInput::decodedPath(QString::fromStdString(args[2]));
+    if (!validIndex || MonitorInput::arguments(monitor, QString::fromStdString(args[1])).isEmpty() || tool.isEmpty())
+      throw ServerConfigReadException(s, "invalid monitor index, source or encoded helper path");
+    if (!args[3].empty() && !isComputer(args[3]))
+      throw ServerConfigReadException(s, "unknown computer in switchMonitorInput");
+    action = new InputFilter::SwitchMonitorInputAction(m_events, monitor, args[1], tool.toStdString(),
+                                                      args[3].empty() ? "" : getCanonicalName(args[3]));
+  }
 
   else if (name == "switchToScreen") {
     if (args.size() != 1) {

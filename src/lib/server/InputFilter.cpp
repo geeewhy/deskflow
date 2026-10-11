@@ -12,6 +12,13 @@
 #include "deskflow/KeyMap.h"
 #include "server/PrimaryClient.h"
 #include "server/Server.h"
+#include "common/MonitorInput.h"
+#include <QFileInfo>
+#include <QProcess>
+#ifdef Q_OS_WIN
+#include "arch/win32/ArchMiscWindows.h"
+#include "platform/MSWindowsProcess.h"
+#endif
 
 #include <cstdint>
 #include <cstdlib>
@@ -20,6 +27,62 @@
 // -----------------------------------------------------------------------------
 // Input Filter Condition Classes
 // -----------------------------------------------------------------------------
+
+InputFilter::SwitchMonitorInputAction::SwitchMonitorInputAction(
+    IEventQueue *events, int monitor, const std::string &source, const std::string &tool, const std::string &computer)
+    : m_events(events), m_monitor(monitor), m_source(source), m_tool(tool), m_computer(computer)
+{
+}
+
+InputFilter::Action *InputFilter::SwitchMonitorInputAction::clone() const
+{
+  return new SwitchMonitorInputAction(*this);
+}
+
+std::string InputFilter::SwitchMonitorInputAction::format() const
+{
+  return QStringLiteral("switchMonitorInput(%1,%2,%3,%4)").arg(m_monitor).arg(QString::fromStdString(m_source),
+         MonitorInput::encodedPath(QString::fromStdString(m_tool)), QString::fromStdString(m_computer)).toStdString();
+}
+
+void InputFilter::SwitchMonitorInputAction::perform(const Event &event)
+{
+#ifdef Q_OS_WIN
+  const auto tool = QString::fromStdString(m_tool);
+  const auto args = MonitorInput::arguments(m_monitor, QString::fromStdString(m_source));
+  if (args.isEmpty() || !QFileInfo(tool).isFile()) {
+    LOG_ERR("monitor input switch failed: configure a valid writeValueToDisplay.exe path and source");
+    return;
+  }
+  bool started = false;
+  if (ArchMiscWindows::isProcessElevated()) {
+    const auto command = QStringLiteral("\"%1\" %2").arg(tool, args.join(' '));
+    started = deskflow::platform::MSWindowsProcess::startDetachedAsSessionUser(command.toStdWString(), true);
+  } else {
+    QProcess process;
+    process.setProgram(tool);
+    process.setArguments(args);
+    process.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *arguments) {
+      arguments->flags |= CREATE_NO_WINDOW;
+      arguments->startupInfo->dwFlags |= STARTF_USESHOWWINDOW;
+      arguments->startupInfo->wShowWindow = SW_HIDE;
+    });
+    started = process.startDetached();
+  }
+  if (!started) {
+    LOG_ERR("failed to launch monitor input control helper");
+    return;
+  }
+  LOG_INFO("requested monitor %d input %s", m_monitor, m_source.c_str());
+  if (!m_computer.empty()) {
+    SwitchToComputerAction switchInput(m_events, m_computer);
+    switchInput.perform(event);
+  }
+#else
+  Q_UNUSED(event)
+  LOG_ERR("LG monitor input hotkeys currently require a Windows server");
+#endif
+}
 
 void InputFilter::Condition::enablePrimary(PrimaryClient *)
 {

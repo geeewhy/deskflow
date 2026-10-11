@@ -189,7 +189,7 @@ void MSWindowsProcess::shutdown(HANDLE handle, DWORD pid, int timeout)
   }
 }
 
-bool MSWindowsProcess::startDetachedAsSessionUser(const std::wstring &command)
+bool MSWindowsProcess::startDetachedAsSessionUser(const std::wstring &command, bool hidden)
 {
   MSWindowsSession session;
   session.updateActiveSession();
@@ -214,7 +214,11 @@ bool MSWindowsProcess::startDetachedAsSessionUser(const std::wstring &command)
   PROCESS_INFORMATION pi = {};
 
   std::wstring mutableCommand = command;
-  const DWORD flags = CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_CONSOLE;
+  const DWORD flags = CREATE_UNICODE_ENVIRONMENT | (hidden ? CREATE_NO_WINDOW : CREATE_NEW_CONSOLE);
+  if (hidden) {
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+  }
 
   LOG_DEBUG("starting detached process as session user, command: %s", command.c_str());
   const BOOL ok = CreateProcessAsUserW(

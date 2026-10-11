@@ -128,6 +128,20 @@ public:
   };
 
   // LockCursorToComputerAction
+  class SwitchMonitorInputAction : public Action
+  {
+  public:
+    SwitchMonitorInputAction(IEventQueue *events, int monitor, const std::string &source,
+                             const std::string &tool, const std::string &computer);
+    Action *clone() const override;
+    std::string format() const override;
+    void perform(const Event &) override;
+  private:
+    IEventQueue *m_events;
+    int m_monitor;
+    std::string m_source, m_tool, m_computer;
+  };
+
   class LockCursorToComputerAction : public Action
   {
   public:

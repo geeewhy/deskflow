@@ -15,3 +15,11 @@ create_test(
   SOURCE DisplayLayoutTests.cpp
   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/gui"
 )
+
+create_test(
+  NAME MonitorInputTests
+  DEPENDS gui
+  LIBS server base arch app mt net
+  SOURCE MonitorInputTests.cpp
+  WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/gui"
+)

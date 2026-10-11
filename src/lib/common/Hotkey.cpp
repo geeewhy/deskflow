@@ -75,12 +75,12 @@ QTextStream &operator<<(QTextStream &outStream, const Hotkey &hotkey)
     return outStream;
 
   QString outText = QStringLiteral("\t%1 = ").arg(hotkey.text());
-  for (int i = 0; i < hotkey.actions().size(); i++) {
-    outText.append(hotkey.actions().at(i).text());
-    if (i != hotkey.actions().size() - 1) {
-      outText.append(QStringLiteral(", "));
-    }
-  }
+  QStringList pressed, released;
+  for (const auto &action : hotkey.actions())
+    (action.activeOnRelease() ? released : pressed).append(action.text());
+  outText.append(pressed.join(", "));
+  if (!released.isEmpty())
+    outText.append(QStringLiteral(";%1").arg(released.join(", ")));
   outText.append(QStringLiteral("\n"));
 
   outStream << outText;
