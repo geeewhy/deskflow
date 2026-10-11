@@ -14,8 +14,10 @@
 #include "client/ServerProxy.h"
 #include "client/ServerProxy1_7.h"
 #include "client/ServerProxy1_8.h"
+#include "client/ServerProxy1_9.h"
 #include "common/NetworkProtocol.h"
 #include "common/Settings.h"
+#include "deskflow/AppUtil.h"
 #include "deskflow/Clipboard.h"
 #include "deskflow/Computer.h"
 #include "deskflow/DeskflowException.h"
@@ -65,6 +67,8 @@ Client::Client(
 {
   assert(m_socketFactory != nullptr);
   assert(m_computer != nullptr);
+
+  m_bidirectional = Settings::value(Settings::Core::BidirectionalInput).toBool();
 
   // register suspend/resume event handlers
   m_events->addHandler(EventTypes::ComputerSuspend, getEventTarget(), [this](const auto &) { handleSuspend(); });
@@ -168,8 +172,19 @@ void Client::refuseConnection(deskflow::core::ConnectionRefusal reason, const ch
 
 void Client::handshakeComplete()
 {
+  if (m_bidirectional && !m_bidirectionalAllowed) {
+    m_events->addEvent(Event(
+        EventTypes::ClientDisconnectRequested, m_stream->getEventTarget(),
+        new DisconnectRequest(
+            DisconnectRequest::Kind::Disconnect, "Enable bidirectional input on both computers using this fork"
+        )
+    ));
+    return;
+  }
   m_ready = true;
   m_computer->enable();
+  updateCaptureFocus();
+  setInputHotkeys(m_pendingInputHotkeys);
   if (m_relativeMouseMoves && !m_hasRelativeRestorePosition) {
     saveRelativeRestorePosition();
   }
@@ -225,7 +240,8 @@ void Client::enter(int32_t xAbs, int32_t yAbs, uint32_t, KeyModifierMask mask, b
     LOG_VERBOSE("using relative restore position: %d,%d", xAbs, yAbs);
   }
   m_computer->mouseMove(xAbs, yAbs);
-  m_computer->enter(mask);
+  if (!m_bidirectional || !m_computer->isOnComputer())
+    m_computer->enter(mask);
 }
 
 bool Client::leave()
@@ -235,7 +251,8 @@ bool Client::leave()
   }
   m_active = false;
 
-  m_computer->leave();
+  if (!m_bidirectional || m_computer->isOnComputer())
+    m_computer->leave();
 
   if (m_enableClipboard) {
     // send clipboards that we own and that have changed
@@ -368,6 +385,117 @@ void Client::saveRelativeRestorePosition()
   LOG_VERBOSE("saved relative restore position: %d,%d", m_relativeRestoreX, m_relativeRestoreY);
 }
 
+void Client::setBidirectionalAllowed(bool allowed)
+{
+  m_bidirectionalAllowed = allowed;
+}
+
+void Client::setInputFocus(uint32_t epoch, bool local)
+{
+  m_inputEpoch = epoch;
+  m_localInputFocus = local;
+  updateCaptureFocus();
+}
+
+void Client::setInputHotkeys(const std::vector<uint32_t> &keys)
+{
+  // DBHK precedes handshake completion. Register only after the key map exists.
+  if (!m_bidirectional)
+    return;
+  if (keys.size() > 512 || keys.size() % 2 != 0)
+    throw BadClientException("Invalid shared hotkey list");
+  m_pendingInputHotkeys = keys;
+  if (!m_ready)
+    return;
+  for (const auto &[id, key] : m_inputHotkeys)
+    m_computer->unregisterHotKey(id);
+  m_inputHotkeys.clear();
+  for (size_t i = 0; i < keys.size(); i += 2) {
+    const auto key = static_cast<uint16_t>(keys[i]);
+    const auto mask = static_cast<uint16_t>(keys[i + 1]);
+    if (auto id = m_computer->registerHotKey(key, mask))
+      m_inputHotkeys.emplace(id, std::make_pair(key, mask));
+  }
+}
+
+void Client::updateCaptureFocus()
+{
+  if (!m_ready || !m_bidirectional || !m_bidirectionalAllowed)
+    return;
+  // Primary capture passes physical events locally on this desktop and consumes
+  // them while another desktop has the shared focus.
+  if (m_localInputFocus && !m_computer->isOnComputer())
+    m_computer->enter(0);
+  if (!m_localInputFocus && m_computer->isOnComputer())
+    m_computer->leave();
+  m_computer->reconfigure(0xf);
+}
+
+void Client::handleLocalInput(const Event &event)
+{
+  auto *proxy = dynamic_cast<ServerProxy1_9 *>(m_server);
+  if (!m_ready || !m_bidirectionalAllowed || !proxy)
+    return;
+  deskflow::SharedInput input;
+  input.epoch = m_inputEpoch;
+  using enum EventTypes;
+  using Kind = deskflow::SharedInput::Kind;
+  switch (event.getType()) {
+  case PrimaryComputerHotkeyDown:
+  case PrimaryComputerHotkeyUp: {
+    const auto *info = static_cast<const IPlatformComputer::HotKeyInfo *>(event.getData());
+    auto found = m_inputHotkeys.find(info->m_id);
+    if (found == m_inputHotkeys.end())
+      return;
+    input.kind = event.getType() == PrimaryComputerHotkeyDown ? Kind::HotkeyDown : Kind::HotkeyUp;
+    input.key = found->second.first;
+    input.mask = found->second.second;
+    break;
+  }
+  case KeyStateKeyDown:
+  case KeyStateKeyUp:
+  case KeyStateKeyRepeat: {
+    const auto *info = static_cast<const IPlatformComputer::KeyInfo *>(event.getData());
+    input.kind = event.getType() == KeyStateKeyDown
+                     ? Kind::KeyDown
+                     : (event.getType() == KeyStateKeyUp ? Kind::KeyUp : Kind::KeyRepeat);
+    input.key = static_cast<uint16_t>(info->m_key);
+    input.mask = info->m_mask;
+    input.button = info->m_button;
+    input.count = static_cast<uint16_t>(info->m_count);
+    input.language = AppUtil::instance().getCurrentLanguageCode();
+    break;
+  }
+  case PrimaryComputerButtonDown:
+  case PrimaryComputerButtonUp: {
+    const auto *info = static_cast<const IPlatformComputer::ButtonInfo *>(event.getData());
+    input.kind = event.getType() == PrimaryComputerButtonDown ? Kind::ButtonDown : Kind::ButtonUp;
+    input.button = info->m_button;
+    input.mask = info->m_mask;
+    break;
+  }
+  case PrimaryComputerMotionOnPrimary:
+  case PrimaryComputerMotionOnSecondary: {
+    const auto *info = static_cast<const IPlatformComputer::MotionInfo *>(event.getData());
+    input.kind = event.getType() == PrimaryComputerMotionOnPrimary ? Kind::AbsoluteMotion : Kind::RelativeMotion;
+    input.x = info->m_x;
+    input.y = info->m_y;
+    break;
+  }
+  case PrimaryComputerWheel: {
+    const auto *info = static_cast<const IPlatformComputer::WheelInfo *>(event.getData());
+    input.kind = Kind::Wheel;
+    input.x = info->m_xDelta;
+    input.y = info->m_yDelta;
+    break;
+  }
+  default:
+    return;
+  }
+  if (input.valid())
+    proxy->sendInput(input);
+}
+
 std::string Client::getName() const
 {
   return m_name;
@@ -469,6 +597,11 @@ bool Client::setupComputer(int16_t protocolMinor)
   assert(m_server == nullptr);
 
   m_ready = false;
+  m_bidirectionalAllowed = false;
+  m_inputEpoch = 0;
+  m_localInputFocus = false;
+  if (m_bidirectional && protocolMinor < 9)
+    return false;
 
   // only 1.6 and later have a proxy: the clipboard, mouse wheel and key message formats
   // differ below that, and nothing older (synergy 1.4 and earlier) still needs supporting.
@@ -480,6 +613,9 @@ bool Client::setupComputer(int16_t protocolMinor)
   case 7:
     m_server = new ServerProxy1_7(this, m_stream, m_events);
     break;
+  case 9:
+    m_server = new ServerProxy1_9(this, m_stream, m_events);
+    break;
   case 8:
     m_server = new ServerProxy1_8(this, m_stream, m_events);
     break;
@@ -488,6 +624,15 @@ bool Client::setupComputer(int16_t protocolMinor)
   }
 
   if (m_server != nullptr) {
+    if (m_bidirectional) {
+      for (auto type :
+           {EventTypes::KeyStateKeyDown, EventTypes::KeyStateKeyUp, EventTypes::KeyStateKeyRepeat,
+            EventTypes::PrimaryComputerButtonDown, EventTypes::PrimaryComputerButtonUp,
+            EventTypes::PrimaryComputerMotionOnPrimary, EventTypes::PrimaryComputerMotionOnSecondary,
+            EventTypes::PrimaryComputerWheel, EventTypes::PrimaryComputerHotkeyDown,
+            EventTypes::PrimaryComputerHotkeyUp})
+        m_events->addHandler(type, getEventTarget(), [this](const auto &e) { handleLocalInput(e); });
+    }
     m_events->addHandler(EventTypes::ComputerShapeChanged, getEventTarget(), [this](const auto &) {
       handleShapeChanged();
     });
@@ -539,11 +684,27 @@ void Client::cleanupConnection()
 
 void Client::cleanupComputer()
 {
+  if (m_ready) {
+    for (const auto &[id, key] : m_inputHotkeys)
+      m_computer->unregisterHotKey(id);
+    m_inputHotkeys.clear();
+    m_computer->disable();
+    m_ready = false;
+  }
   if (m_server != nullptr) {
-    if (m_ready) {
-      m_computer->disable();
-      m_ready = false;
+    if (m_bidirectional) {
+      for (auto type :
+           {EventTypes::KeyStateKeyDown, EventTypes::KeyStateKeyUp, EventTypes::KeyStateKeyRepeat,
+            EventTypes::PrimaryComputerButtonDown, EventTypes::PrimaryComputerButtonUp,
+            EventTypes::PrimaryComputerMotionOnPrimary, EventTypes::PrimaryComputerMotionOnSecondary,
+            EventTypes::PrimaryComputerWheel, EventTypes::PrimaryComputerHotkeyDown,
+            EventTypes::PrimaryComputerHotkeyUp})
+        m_events->removeHandler(type, getEventTarget());
     }
+    m_pendingInputHotkeys.clear();
+    m_bidirectionalAllowed = false;
+    m_localInputFocus = false;
+    m_active = false;
     m_events->removeHandler(EventTypes::ComputerShapeChanged, getEventTarget());
     m_events->removeHandler(EventTypes::ClipboardGrabbed, getEventTarget());
     delete m_server;

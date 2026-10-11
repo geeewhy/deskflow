@@ -56,6 +56,7 @@ public:
     inline static const auto ProcessMode = QStringLiteral("core/processMode");
     inline static const auto ComputerName = QStringLiteral("core/computerName");
     inline static const auto Display = QStringLiteral("core/display");
+    inline static const auto BidirectionalInput = QStringLiteral("core/bidirectionalInput");
     inline static const auto UseHooks = QStringLiteral("core/useHooks");
     inline static const auto Language = QStringLiteral("core/language");
     inline static const auto EnableEnterCommand = QStringLiteral("core/enableEnterCommand");
@@ -285,6 +286,7 @@ private:
     , Core::LastVersion
     , Core::Port
     , Core::PreventSleep
+    , Core::BidirectionalInput
     , Core::ProcessMode
     , Core::EnableEnterCommand
     , Core::EnableExitCommand
@@ -346,6 +348,7 @@ private:
     , Gui::ShowVersionInTitle
     , Gui::IgnoreMissingKeyboardLayouts
     , Core::PreventSleep
+    , Core::BidirectionalInput
     , Core::EnableEnterCommand
     , Core::EnableExitCommand
     , Client::DynamicConnectionRetry

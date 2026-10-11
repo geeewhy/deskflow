@@ -8,6 +8,7 @@
 #include "platform/MSWindowsHook.h"
 #include "base/DirectionTypes.h"
 #include "base/Log.h"
+#include "deskflow/BidirectionalInput.h"
 #include "deskflow/DisplayException.h"
 
 #include <cstring>
@@ -453,7 +454,8 @@ static LRESULT CALLBACK keyboardLLHook(int code, WPARAM wParam, LPARAM lParam)
     KBDLLHOOKSTRUCT *info = reinterpret_cast<KBDLLHOOKSTRUCT *>(lParam);
 
     bool const injected = info->flags & LLKHF_INJECTED;
-    if (!g_isPrimary && injected) {
+    if ((!g_isPrimary && injected) || (injected && info->dwExtraInfo == deskflow::kInputEventTag &&
+                                       info->vkCode != DESKFLOW_HOOK_FAKE_INPUT_VIRTUAL_KEY)) {
       return CallNextHookEx(g_keyboardLL, code, wParam, lParam);
     }
 
@@ -600,7 +602,7 @@ static LRESULT CALLBACK mouseLLHook(int code, WPARAM wParam, LPARAM lParam)
     MSLLHOOKSTRUCT *info = reinterpret_cast<MSLLHOOKSTRUCT *>(lParam);
 
     bool const injected = info->flags & LLMHF_INJECTED;
-    if (!g_isPrimary && injected) {
+    if ((!g_isPrimary && injected) || (injected && info->dwExtraInfo == deskflow::kInputEventTag)) {
       return CallNextHookEx(g_mouseLL, code, wParam, lParam);
     }
 

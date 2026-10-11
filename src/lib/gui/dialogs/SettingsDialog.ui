@@ -86,6 +86,16 @@
         </widget>
        </item>
        <item>
+        <widget class="QCheckBox" name="cbBidirectionalInput">
+         <property name="text">
+          <string>Share keyboard and mouse from both computers (experimental)</string>
+         </property>
+         <property name="toolTip">
+          <string>Enable on both Windows and Mac using this fork. Both computers' devices control the selected desktop. Restart Deskflow after changing this setting.</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QCheckBox" name="cbPreventSleep">
          <property name="text">
           <string>Prevent this computer from going to sleep</string>

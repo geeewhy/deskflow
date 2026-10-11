@@ -11,6 +11,7 @@
 #include "base/Event.h"
 #include "base/Stopwatch.h"
 #include "common/NetworkProtocol.h"
+#include "deskflow/BidirectionalInput.h"
 #include "deskflow/Clipboard.h"
 #include "deskflow/ClipboardTypes.h"
 #include "deskflow/KeyTypes.h"
@@ -160,6 +161,7 @@ public:
   destroyed when the client disconnects or is disconnected.
   */
   void adoptClient(BaseClientProxy *client);
+  void receiveInput(BaseClientProxy *source, const deskflow::SharedInput &input);
 
   //! Disconnect clients
   /*!
@@ -332,8 +334,11 @@ private:
   void onKeyRepeat(KeyID, KeyModifierMask, int32_t, KeyButton, const std::string &);
   void onMouseDown(ButtonID);
   void onMouseUp(ButtonID);
-  bool onMouseMovePrimary(int32_t x, int32_t y);
-  void onMouseMoveSecondary(int32_t dx, int32_t dy);
+  bool onMouseMovePrimary(int32_t x, int32_t y, BaseClientProxy *source = nullptr);
+  void onMouseMoveSecondary(int32_t dx, int32_t dy, bool remote = false);
+  void sendInputFocus();
+  void releaseSharedInput();
+  bool acceptHostInput(deskflow::SharedInput::Kind kind, uint16_t button = 0);
   void onMouseWheel(int32_t xDelta, int32_t yDelta);
 
   // add client to list and attach event handlers for client
@@ -424,6 +429,8 @@ private:
 
   // the sequence number of enter messages
   uint32_t m_seqNum = 0;
+  bool m_bidirectional = false;
+  deskflow::InputOwnership m_inputOwnership;
 
   // current mouse position (in absolute computer coordinates) on
   // whichever computer is active

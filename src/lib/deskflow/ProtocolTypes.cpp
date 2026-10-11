@@ -7,6 +7,11 @@
 
 #include "deskflow/ProtocolTypes.h"
 
+const char *const kMsgDBidirectionalCapability = "DBCP%1i";
+const char *const kMsgDBidirectionalFocus = "DBFC%4i%1i";
+const char *const kMsgDBidirectionalInput = "DBIN%4i%1i%2i%2i%2i%2i%4i%4i%s";
+const char *const kMsgDBidirectionalHotkeys = "DBHK%4I";
+
 // The protocol name string within the hello and hello back messages must be
 // 7 chars for backward compatibility (Synergy and Barrier are 7 chars).
 const char *const kMsgHello = "%7s%2i%2i";

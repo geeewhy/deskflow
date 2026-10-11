@@ -21,6 +21,24 @@ namespace deskflow {
 
 namespace {
 
+class ScopedInputInjection
+{
+public:
+  ScopedInputInjection(Computer *computer, bool guard) : m_computer(guard ? computer : nullptr)
+  {
+    if (m_computer)
+      m_computer->fakeInputBegin();
+  }
+  ~ScopedInputInjection()
+  {
+    if (m_computer)
+      m_computer->fakeInputEnd();
+  }
+
+private:
+  Computer *m_computer;
+};
+
 bool runComputerCommand(const QString &commandLine)
 {
 #ifdef Q_OS_WIN
@@ -221,6 +239,7 @@ void Computer::screensaver(bool) const
 
 void Computer::keyDown(KeyID id, KeyModifierMask mask, KeyButton button, const std::string &lang)
 {
+  ScopedInputInjection injection(this, m_isPrimary && !m_fakeInput);
   // check for ctrl+alt+del emulation
   if (id == kKeyDelete && (mask & (KeyModifierControl | KeyModifierAlt)) == (KeyModifierControl | KeyModifierAlt)) {
     LOG_DEBUG("emulating ctrl+alt+del press");
@@ -233,40 +252,45 @@ void Computer::keyDown(KeyID id, KeyModifierMask mask, KeyButton button, const s
 
 void Computer::keyRepeat(KeyID id, KeyModifierMask mask, int32_t count, KeyButton button, const std::string &lang)
 {
-  assert(!m_isPrimary);
+  ScopedInputInjection injection(this, m_isPrimary && !m_fakeInput);
   m_computer->fakeKeyRepeat(id, mask, count, button, lang);
 }
 
 void Computer::keyUp(KeyID, KeyModifierMask, KeyButton button)
 {
+  ScopedInputInjection injection(this, m_isPrimary && !m_fakeInput);
   m_computer->fakeKeyUp(button);
 }
 
 void Computer::mouseDown(ButtonID button)
 {
+  ScopedInputInjection injection(this, m_isPrimary && !m_fakeInput);
   m_computer->fakeMouseButton(button, true);
 }
 
 void Computer::mouseUp(ButtonID button)
 {
+  ScopedInputInjection injection(this, m_isPrimary && !m_fakeInput);
   m_computer->fakeMouseButton(button, false);
 }
 
 void Computer::mouseMove(int32_t x, int32_t y)
 {
-  assert(!m_isPrimary);
-  m_computer->fakeMouseMove(x, y);
+  if (m_isPrimary)
+    m_computer->warpCursor(x, y);
+  else
+    m_computer->fakeMouseMove(x, y);
 }
 
-void Computer::mouseRelativeMove(int32_t dx, int32_t dy) const
+void Computer::mouseRelativeMove(int32_t dx, int32_t dy)
 {
-  assert(!m_isPrimary);
+  ScopedInputInjection injection(this, m_isPrimary && !m_fakeInput);
   m_computer->fakeMouseRelativeMove(dx, dy);
 }
 
-void Computer::mouseWheel(int32_t xDelta, int32_t yDelta) const
+void Computer::mouseWheel(int32_t xDelta, int32_t yDelta)
 {
-  assert(!m_isPrimary);
+  ScopedInputInjection injection(this, m_isPrimary && !m_fakeInput);
   m_computer->fakeMouseWheel({xDelta, yDelta});
 }
 

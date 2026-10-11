@@ -22,6 +22,7 @@
 #include "net/TCPSocket.h"
 #include "server/ClientListener.h"
 #include "server/ClientProxy.h"
+#include "server/ClientProxy1_9.h"
 #include "server/ClientProxyUnknown.h"
 #include "server/PrimaryClient.h"
 
@@ -48,6 +49,11 @@ Server::Server(ServerConfig &config, PrimaryClient *primaryClient, deskflow::Com
       m_computer(computer),
       m_events(events)
 {
+  m_bidirectional = Settings::value(Settings::Core::BidirectionalInput).toBool();
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MACOS)
+  m_bidirectional = false;
+#endif
+
   // must have a primary client and it must have a canonical name
   assert(m_primaryClient != nullptr);
   assert(config.isComputer(primaryClient->getName()));
@@ -121,6 +127,7 @@ Server::Server(ServerConfig &config, PrimaryClient *primaryClient, deskflow::Com
   });
 
   // add connection
+  m_primaryClient->getCursorPos(m_x, m_y);
   addClient(m_primaryClient);
 
   // set initial configuration
@@ -270,6 +277,11 @@ void Server::adoptClient(BaseClientProxy *client)
   ipcSendConnectionState(deskflow::core::ConnectionState::Connected);
   sendConnectedClientsIpc();
 
+  // Extension state must precede DSOP, which completes the client handshake.
+  if (auto *shared = dynamic_cast<ClientProxy1_9 *>(client)) {
+    shared->sendInputCapability(m_bidirectional);
+    shared->sendInputFocus(m_seqNum, client == m_active);
+  }
   // send configuration options to client
   sendOptions(client);
 
@@ -382,6 +394,9 @@ bool Server::isLockedToComputer() const
     return true;
   }
 
+  if (m_bidirectional && m_inputOwnership.held())
+    return true;
+
   // locked if primary says we're locked
   if (m_primaryClient->isLockedToComputer()) {
     return true;
@@ -396,7 +411,7 @@ int32_t Server::getJumpZoneSize(const BaseClientProxy *client) const
   if (client == m_primaryClient) {
     return m_primaryClient->getJumpZoneSize();
   } else {
-    return 0;
+    return m_bidirectional && dynamic_cast<const ClientProxy1_9 *>(client) ? 1 : 0;
   }
 }
 
@@ -458,6 +473,8 @@ void Server::switchComputer(BaseClientProxy *dst, int32_t x, int32_t y, bool for
   // since that's a waste of time we skip that and just warp the
   // mouse.
   if (m_active != dst) {
+    // Release remote synthesized keys before changing the recipient.
+    releaseSharedInput();
     // leave active computer
     if (!m_active->leave()) {
       // cannot leave computer
@@ -496,6 +513,7 @@ void Server::switchComputer(BaseClientProxy *dst, int32_t x, int32_t y, bool for
 
     // enter new computer
     m_active->enter(x, y, m_seqNum, m_primaryClient->getToggleMask(), forScreensaver);
+    sendInputFocus();
 
     if (m_enableClipboard) {
       // send the clipboard data to new active computer
@@ -1079,6 +1097,19 @@ void Server::sendOptions(BaseClientProxy *client) const
   }
 
   // send the options
+  if (auto *shared = dynamic_cast<ClientProxy1_9 *>(client)) {
+    std::vector<uint32_t> hotkeys;
+    if (m_bidirectional) {
+      for (uint32_t i = 0; i < m_inputFilter->getNumRules(); ++i) {
+        auto *key = dynamic_cast<const InputFilter::KeystrokeCondition *>(m_inputFilter->getRule(i).getCondition());
+        if (key) {
+          hotkeys.push_back(key->getKey());
+          hotkeys.push_back(key->getMask());
+        }
+      }
+    }
+    shared->sendInputHotkeys(hotkeys);
+  }
   client->resetOptions();
   client->setOptions(optionsList);
 }
@@ -1120,10 +1151,8 @@ void Server::processOptions()
     } else if (id == kOptionClipboardSharingSize) {
       if (value <= 0) {
         m_maximumClipboardSize = 0;
-        LOG_INFO(
-            "clipboard sharing is disabled because the "
-            "maximum shared clipboard size is set to 0"
-        );
+        LOG_INFO("clipboard sharing is disabled because the "
+                 "maximum shared clipboard size is set to 0");
       } else {
         m_maximumClipboardSize = static_cast<size_t>(value);
       }
@@ -1232,50 +1261,58 @@ void Server::handleKeyDownEvent(const Event &event)
 {
   const auto *info = static_cast<IPlatformComputer::KeyInfo *>(event.getData());
   auto lang = AppUtil::instance().getCurrentLanguageCode();
-  onKeyDown(info->m_key, info->m_mask, info->m_button, lang, info->m_computers.c_str());
+  if (acceptHostInput(deskflow::SharedInput::Kind::KeyDown, info->m_button))
+    onKeyDown(info->m_key, info->m_mask, info->m_button, lang, info->m_computers.c_str());
 }
 
 void Server::handleKeyUpEvent(const Event &event)
 {
   auto *info = static_cast<IPlatformComputer::KeyInfo *>(event.getData());
-  onKeyUp(info->m_key, info->m_mask, info->m_button, info->m_computers.c_str());
+  if (acceptHostInput(deskflow::SharedInput::Kind::KeyUp, info->m_button))
+    onKeyUp(info->m_key, info->m_mask, info->m_button, info->m_computers.c_str());
 }
 
 void Server::handleKeyRepeatEvent(const Event &event)
 {
   const auto *info = static_cast<IPlatformComputer::KeyInfo *>(event.getData());
   auto lang = AppUtil::instance().getCurrentLanguageCode();
-  onKeyRepeat(info->m_key, info->m_mask, info->m_count, info->m_button, lang);
+  if (acceptHostInput(deskflow::SharedInput::Kind::KeyRepeat, info->m_button))
+    onKeyRepeat(info->m_key, info->m_mask, info->m_count, info->m_button, lang);
 }
 
 void Server::handleButtonDownEvent(const Event &event)
 {
   const auto *info = static_cast<IPlatformComputer::ButtonInfo *>(event.getData());
-  onMouseDown(info->m_button);
+  if (acceptHostInput(deskflow::SharedInput::Kind::ButtonDown, info->m_button))
+    onMouseDown(info->m_button);
 }
 
 void Server::handleButtonUpEvent(const Event &event)
 {
   const auto *info = static_cast<IPlatformComputer::ButtonInfo *>(event.getData());
-  onMouseUp(info->m_button);
+  if (acceptHostInput(deskflow::SharedInput::Kind::ButtonUp, info->m_button))
+    onMouseUp(info->m_button);
 }
 
 void Server::handleMotionPrimaryEvent(const Event &event)
 {
   const auto *info = static_cast<IPlatformComputer::MotionInfo *>(event.getData());
-  onMouseMovePrimary(info->m_x, info->m_y);
+  if (acceptHostInput(deskflow::SharedInput::Kind::AbsoluteMotion))
+    onMouseMovePrimary(info->m_x, info->m_y);
 }
 
 void Server::handleMotionSecondaryEvent(const Event &event)
 {
   const auto *info = static_cast<IPlatformComputer::MotionInfo *>(event.getData());
-  onMouseMoveSecondary(info->m_x, info->m_y);
+  if (acceptHostInput(deskflow::SharedInput::Kind::RelativeMotion))
+    onMouseMoveSecondary(info->m_x, info->m_y);
 }
 
 void Server::handleWheelEvent(const Event &event)
 {
   const auto *info = static_cast<IPlatformComputer::WheelInfo *>(event.getData());
-  onMouseWheel(info->m_xDelta, info->m_yDelta);
+  if (acceptHostInput(deskflow::SharedInput::Kind::Wheel))
+    onMouseWheel(info->m_xDelta, info->m_yDelta);
 }
 
 void Server::handleSwitchWaitTimeout()
@@ -1293,6 +1330,8 @@ void Server::handleSwitchWaitTimeout()
 
 void Server::handleClientDisconnected(BaseClientProxy *client)
 {
+  if (m_inputOwnership.source() == client->getName() || m_active == client)
+    releaseSharedInput();
   // client has disconnected.  it might be an old client or an
   // active client.  we don't care so just handle it both ways.
   removeActiveClient(client);
@@ -1438,6 +1477,135 @@ void Server::handleLockCursorToComputerEvent(const Event &event)
     m_primaryClient->reconfigure(getActivePrimarySides());
     if (!isLockedToComputerServer()) {
       stopRelativeMoves();
+    }
+  }
+}
+
+void Server::sendInputFocus()
+{
+  for (const auto &[name, client] : m_clients) {
+    if (auto *shared = dynamic_cast<ClientProxy1_9 *>(client))
+      shared->sendInputFocus(m_seqNum, client == m_active);
+  }
+}
+
+void Server::releaseSharedInput()
+{
+  if (!m_bidirectional)
+    return;
+  // Host events on the host desktop have already been delivered by the OS.
+  if (m_active != m_primaryClient || m_inputOwnership.source() != m_primaryClient->getName()) {
+    for (const auto &[button, input] : m_inputOwnership.keys()) {
+      if (m_active == m_primaryClient)
+        m_computer->keyUp(input.key, 0, button);
+      else
+        m_active->keyUp(input.key, 0, button);
+    }
+    for (auto button : m_inputOwnership.buttons()) {
+      if (m_active == m_primaryClient)
+        m_computer->mouseUp(static_cast<ButtonID>(button));
+      else
+        m_active->mouseUp(static_cast<ButtonID>(button));
+    }
+  }
+  m_inputOwnership.clear();
+}
+
+bool Server::acceptHostInput(deskflow::SharedInput::Kind kind, uint16_t button)
+{
+  if (!m_bidirectional)
+    return true;
+  // Button zero is an InputFilter action, not a physical key.
+  if (button == 0 && (kind == deskflow::SharedInput::Kind::KeyDown || kind == deskflow::SharedInput::Kind::KeyUp))
+    return true;
+  deskflow::SharedInput input;
+  input.kind = kind;
+  input.button = button;
+  return m_inputOwnership.accept(m_primaryClient->getName(), input);
+}
+
+void Server::receiveInput(BaseClientProxy *source, const deskflow::SharedInput &input)
+{
+  // Reject input from obsolete connections and from an earlier recipient.
+  if (!m_bidirectional || !m_clientSet.contains(source) || !input.valid())
+    return;
+  using enum deskflow::SharedInput::Kind;
+  if (input.kind == HotkeyDown || input.kind == HotkeyUp) {
+    auto *shared = dynamic_cast<ClientProxy1_9 *>(source);
+    const bool press = input.kind == HotkeyDown;
+    if (!shared || (press && input.epoch != m_seqNum))
+      return;
+    if (m_inputOwnership.held() && m_inputOwnership.source() != source->getName())
+      return;
+    if (shared->trackHotkey(input.key, input.mask, press))
+      m_inputFilter->handleRemoteHotkey(input.key, input.mask, press);
+    return;
+  }
+  const auto previousSource = m_inputOwnership.source();
+  if (input.epoch != m_seqNum || !m_inputOwnership.accept(source->getName(), input))
+    return;
+  if (input.kind == AbsoluteMotion) {
+    if (source == m_active)
+      onMouseMovePrimary(input.x, input.y, source);
+    return;
+  }
+  if (input.kind == RelativeMotion) {
+    if (m_active == m_primaryClient && previousSource != source->getName())
+      m_primaryClient->getCursorPos(m_x, m_y);
+    if (source != m_active)
+      onMouseMoveSecondary(input.x, input.y, true);
+    return;
+  }
+  // Physical events on the source's own desktop have already reached its OS.
+  if (source == m_active)
+    return;
+  // The primary proxy normally ignores local input. Inject directly when the
+  // recipient is the server, using the platform's loop prevention.
+  if (m_active == m_primaryClient) {
+    switch (input.kind) {
+    case KeyDown:
+      m_computer->keyDown(input.key, input.mask, input.button, input.language);
+      break;
+    case KeyUp:
+      m_computer->keyUp(input.key, input.mask, input.button);
+      break;
+    case KeyRepeat:
+      m_computer->keyRepeat(input.key, input.mask, input.count, input.button, input.language);
+      break;
+    case ButtonDown:
+      m_computer->mouseDown(static_cast<ButtonID>(input.button));
+      break;
+    case ButtonUp:
+      m_computer->mouseUp(static_cast<ButtonID>(input.button));
+      break;
+    case Wheel:
+      m_computer->mouseWheel(input.x, input.y);
+      break;
+    default:
+      break;
+    }
+  } else {
+    switch (input.kind) {
+    case KeyDown:
+      m_active->keyDown(input.key, input.mask, input.button, input.language);
+      break;
+    case KeyUp:
+      m_active->keyUp(input.key, input.mask, input.button);
+      break;
+    case KeyRepeat:
+      m_active->keyRepeat(input.key, input.mask, input.count, input.button, input.language);
+      break;
+    case ButtonDown:
+      m_active->mouseDown(static_cast<ButtonID>(input.button));
+      break;
+    case ButtonUp:
+      m_active->mouseUp(static_cast<ButtonID>(input.button));
+      break;
+    case Wheel:
+      m_active->mouseWheel(input.x, input.y);
+      break;
+    default:
+      break;
     }
   }
 }
@@ -1613,12 +1781,14 @@ void Server::onMouseUp(ButtonID id)
   m_active->mouseUp(id);
 }
 
-bool Server::onMouseMovePrimary(int32_t x, int32_t y)
+bool Server::onMouseMovePrimary(int32_t x, int32_t y, BaseClientProxy *source)
 {
   LOG_VERBOSE("onMouseMovePrimary %d,%d", x, y);
 
   // mouse move on primary (server's) computer
-  if (m_active != m_primaryClient) {
+  if (!source)
+    source = m_primaryClient;
+  if (m_active != source) {
     // stale event -- we're actually on a secondary computer
     return false;
   }
@@ -1710,7 +1880,7 @@ bool Server::onMouseMovePrimary(int32_t x, int32_t y)
   return false;
 }
 
-void Server::onMouseMoveSecondary(int32_t dx, int32_t dy)
+void Server::onMouseMoveSecondary(int32_t dx, int32_t dy, bool remote)
 {
   LOG_VERBOSE("mouse move on secondary: %+d,%+d", dx, dy);
 
@@ -1729,7 +1899,7 @@ void Server::onMouseMoveSecondary(int32_t dx, int32_t dy)
 
   // mouse move on secondary (client's) computer
   assert(m_active != nullptr);
-  if (m_active == m_primaryClient) {
+  if (m_active == m_primaryClient && !remote) {
     // stale event -- we're actually on the primary computer
     return;
   }
@@ -1961,6 +2131,8 @@ void Server::closeClient(BaseClientProxy *client, const char *msg)
   // client.
   LOG_INFO("disconnecting client \"%s\"", getName(client).c_str());
 
+  if (m_inputOwnership.source() == client->getName() || m_active == client)
+    releaseSharedInput();
   // send message
   // FIXME -- avoid type cast (kinda hard, though)
   auto clientProxy = static_cast<ClientProxy *>(client);
@@ -2049,6 +2221,8 @@ void Server::forceLeaveClient(const BaseClientProxy *client)
 
     // cut over
     m_active = m_primaryClient;
+    ++m_seqNum;
+    sendInputFocus();
 
     // enter new computer (unless we already have because of the
     // screen saver)

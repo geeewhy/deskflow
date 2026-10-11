@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "deskflow/BidirectionalInput.h"
 #include "deskflow/IClient.h"
 
 #include "base/Event.h"
@@ -131,6 +132,9 @@ public:
   Notifies the client that the connection handshake has completed.
   */
   virtual void handshakeComplete();
+  void setBidirectionalAllowed(bool allowed);
+  void setInputFocus(uint32_t epoch, bool local);
+  void setInputHotkeys(const std::vector<uint32_t> &keys);
 
   //@}
   //! @name accessors
@@ -192,6 +196,8 @@ public:
 
 private:
   void saveRelativeRestorePosition();
+  void handleLocalInput(const Event &event);
+  void updateCaptureFocus();
   void sendClipboard(ClipboardID);
   void sendEvent(deskflow::EventTypes);
   void sendConnectionFailedEvent(const char *msg);
@@ -228,6 +234,12 @@ private:
   EventQueueTimer *m_timer = nullptr;
   ServerProxy *m_server = nullptr;
   bool m_ready = false;
+  bool m_bidirectional = false;
+  bool m_bidirectionalAllowed = false;
+  bool m_localInputFocus = false;
+  uint32_t m_inputEpoch = 0;
+  std::map<uint32_t, std::pair<uint16_t, uint16_t>> m_inputHotkeys;
+  std::vector<uint32_t> m_pendingInputHotkeys;
   bool m_active = false;
   bool m_suspended = false;
   bool m_connectOnResume = false;

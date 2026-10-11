@@ -9,10 +9,10 @@
 #include "server/InputFilter.h"
 #include "base/EventQueue.h"
 #include "base/Log.h"
+#include "common/MonitorInput.h"
 #include "deskflow/KeyMap.h"
 #include "server/PrimaryClient.h"
 #include "server/Server.h"
-#include "common/MonitorInput.h"
 #include <QFileInfo>
 #include <QProcess>
 #ifdef Q_OS_WIN
@@ -29,8 +29,13 @@
 // -----------------------------------------------------------------------------
 
 InputFilter::SwitchMonitorInputAction::SwitchMonitorInputAction(
-    IEventQueue *events, int monitor, const std::string &source, const std::string &tool, const std::string &computer)
-    : m_events(events), m_monitor(monitor), m_source(source), m_tool(tool), m_computer(computer)
+    IEventQueue *events, int monitor, const std::string &source, const std::string &tool, const std::string &computer
+)
+    : m_events(events),
+      m_monitor(monitor),
+      m_source(source),
+      m_tool(tool),
+      m_computer(computer)
 {
 }
 
@@ -41,8 +46,13 @@ InputFilter::Action *InputFilter::SwitchMonitorInputAction::clone() const
 
 std::string InputFilter::SwitchMonitorInputAction::format() const
 {
-  return QStringLiteral("switchMonitorInput(%1,%2,%3,%4)").arg(m_monitor).arg(QString::fromStdString(m_source),
-         MonitorInput::encodedPath(QString::fromStdString(m_tool)), QString::fromStdString(m_computer)).toStdString();
+  return QStringLiteral("switchMonitorInput(%1,%2,%3,%4)")
+      .arg(m_monitor)
+      .arg(
+          QString::fromStdString(m_source), MonitorInput::encodedPath(QString::fromStdString(m_tool)),
+          QString::fromStdString(m_computer)
+      )
+      .toStdString();
 }
 
 void InputFilter::SwitchMonitorInputAction::perform(const Event &event)
@@ -966,4 +976,21 @@ void InputFilter::handleEvent(const Event &event)
 
   // not handled so pass through
   m_events->addEvent(std::move(myEvent));
+}
+
+bool InputFilter::handleRemoteHotkey(KeyID key, KeyModifierMask mask, bool press)
+{
+  for (auto &rule : m_ruleList) {
+    auto *condition = dynamic_cast<const KeystrokeCondition *>(rule.getCondition());
+    if (!condition || condition->getKey() != key || condition->getMask() != mask)
+      continue;
+    IPlatformComputer::HotKeyInfo info;
+    info.m_id = condition->getHotkeyId();
+    Event event(
+        press ? EventTypes::PrimaryComputerHotkeyDown : EventTypes::PrimaryComputerHotkeyUp, this, &info,
+        Event::EventFlags::DontFreeData | Event::EventFlags::DeliverImmediately
+    );
+    return rule.handleEvent(event);
+  }
+  return false;
 }
