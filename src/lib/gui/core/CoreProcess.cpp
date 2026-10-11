@@ -635,6 +635,13 @@ void CoreProcess::onCoreIpcMessageReceived(const QString &command, const QString
       return;
     }
     setConnectionState(state);
+  } else if (command == "desktopSize") {
+    const auto fields = args.split(',');
+    if (fields.size() == 3) {
+      const QSize size(fields[1].toInt(), fields[2].toInt());
+      if (size.width() > 0 && size.height() > 0)
+        Q_EMIT desktopSizeReceived(fields[0], size);
+    }
   } else if (command == "connectedClients") {
     const auto clients = args.isEmpty() ? QStringList() : args.split(",");
     Q_EMIT connectedClientsChanged(clients);

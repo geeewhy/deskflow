@@ -15,6 +15,7 @@
 #include <QDialog>
 
 class SettingsDialogButtonBox;
+class DisplayLayoutWidget;
 class QItemSelection;
 
 namespace Ui {
@@ -120,4 +121,5 @@ private:
   ServerConfig m_serverConfig;
   ComputerSetupModel m_computerSetupModel;
   SettingsDialogButtonBox *m_buttonBox = nullptr;
+  DisplayLayoutWidget *m_displayLayout = nullptr;
 };

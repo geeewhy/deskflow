@@ -273,6 +273,9 @@ void MainWindow::connectSlots()
     connect(m_trayIcon, &QSystemTrayIcon::activated, this, &MainWindow::trayIconActivated);
 
   connect(&m_coreProcess, &CoreProcess::connectedClientsChanged, this, &MainWindow::serverClientsChanged);
+  connect(&m_coreProcess, &CoreProcess::desktopSizeReceived, this, [this](const QString &name, const QSize &size) {
+    m_serverConfig.reportedDisplaySizes.insert(name, size);
+  });
   connect(&m_coreProcess, &CoreProcess::unrecognisedClient, this, &MainWindow::handleUnrecognisedClient);
   connect(&m_coreProcess, &CoreProcess::connectionRefused, this, &MainWindow::handleConnectionRefused);
   connect(&m_coreProcess, &CoreProcess::retryIn, this, &MainWindow::updateTimeoutDelay);

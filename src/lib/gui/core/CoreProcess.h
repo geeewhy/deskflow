@@ -88,6 +88,7 @@ Q_SIGNALS:
   void secureSocket(bool enabled);
   void daemonIpcClientConnectionFailed();
   void connectedClientsChanged(const QStringList &clients);
+  void desktopSizeReceived(const QString &computer, const QSize &size);
   void securityLevelChanged(QString securityLevel);
   void unrecognisedClient(const QString &clientName);
   void connectionRefused(deskflow::core::ConnectionRefusal reason);

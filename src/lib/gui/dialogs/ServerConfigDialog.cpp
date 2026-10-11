@@ -17,6 +17,7 @@
 #include "dialogs/ComputerSettingsDialog.h"
 #include "dialogs/HotkeyDialog.h"
 #include "gui/widgets/SettingsDialogButtonBox.h"
+#include "gui/widgets/DisplayLayoutWidget.h"
 
 #include <QFileDialog>
 #include <QMessageBox>
@@ -36,6 +37,15 @@ ServerConfigDialog::ServerConfigDialog(QWidget *parent, ServerConfig &config)
       m_buttonBox{new SettingsDialogButtonBox(this)}
 {
   ui->setupUi(this);
+  m_displayLayout = new DisplayLayoutWidget(m_serverConfig, this);
+  ui->tabWidget->addTab(m_displayLayout, tr("Display arrangement"));
+  connect(m_displayLayout, &DisplayLayoutWidget::changed, this, &ServerConfigDialog::setButtonBoxEnabledButtons);
+  connect(ui->tabWidget, &QTabWidget::currentChanged, this, [this](int index) {
+    if (ui->tabWidget->widget(index) == m_displayLayout) {
+      m_displayLayout->refresh();
+      setButtonBoxEnabledButtons();
+    }
+  });
   ui->tabWidget->setCurrentIndex(0);
   layout()->addWidget(m_buttonBox);
 
@@ -60,6 +70,15 @@ bool ServerConfigDialog::addClient(const QString &clientName)
 
 void ServerConfigDialog::save()
 {
+  if (!ui->groupExternalConfig->isChecked() && m_serverConfig.useDisplayLayout) {
+    m_serverConfig.syncDisplayLayout();
+    const auto error = DisplayLayout::validationError(m_serverConfig.activeDisplayLayout());
+    if (!error.isEmpty()) {
+      ui->tabWidget->setCurrentWidget(m_displayLayout);
+      QMessageBox::warning(this, tr("Check display arrangement"), error);
+      return;
+    }
+  }
   if (ui->groupExternalConfig->isChecked() && !QFile::exists(ui->lineConfigFile->text())) {
 
     auto selectedButton = QMessageBox::warning(
@@ -361,6 +380,7 @@ void ServerConfigDialog::toggleExternalConfig(bool checked)
   ui->widgetExternalConfigControls->setEnabled(checked);
   ui->tabWidget->setTabEnabled(0, !checked);
   ui->tabWidget->setTabEnabled(1, !checked);
+  ui->tabWidget->setTabEnabled(ui->tabWidget->indexOf(m_displayLayout), !checked);
   serverConfig().setUseExternalConfig(checked);
   setButtonBoxEnabledButtons();
 }
@@ -431,6 +451,7 @@ void ServerConfigDialog::resetFromSettings()
   m_serverConfig.setConfigFile(m_originalServerConfigUsesExternalFile);
   m_serverConfig.setUseExternalConfig(m_originalServerConfigIsExternal);
   loadFromConfig();
+  m_displayLayout->refresh();
   if (ui->tabWidget->currentWidget() == ui->tabComputers) {
     ui->computerSetupView->reset();
     ui->computerSetupView->update();
@@ -522,6 +543,7 @@ void ServerConfigDialog::initConnections() const
 void ServerConfigDialog::updateControls() const
 {
   const bool writable = Settings::isWritable();
+  m_displayLayout->setEnabled(writable);
   ui->cbDefaultLockToComputerState->setEnabled(writable);
   ui->cbDisableLockToComputer->setEnabled(writable);
   ui->cbEnableClipboard->setEnabled(writable);
