@@ -50,11 +50,26 @@ QString Action::text() const
     text.append(m_commandTemplate.arg(m_lockCursorModeNames.at(m_lockCursorMode)));
     break;
 
+  case Type::switchMonitorInput:
+    text.append(QStringLiteral("(%1,%2,%3,%4)").arg(monitorIndex).arg(monitorSource,
+                QString::fromLatin1(monitorTool.toUtf8().toHex()), monitorComputer));
+    break;
+
   default:
     break;
   }
 
   return text;
+}
+
+QString Action::displayText() const
+{
+  if (type() != static_cast<int>(Type::switchMonitorInput))
+    return text();
+  auto label = QStringLiteral("Monitor %1 → %2").arg(monitorIndex).arg(monitorSource == "usb-c" ? "USB-C" : "HDMI 1");
+  if (!monitorComputer.isEmpty())
+    label += QStringLiteral("; keyboard/mouse → %1").arg(monitorComputer);
+  return label;
 }
 
 const KeySequence &Action::keySequence() const
@@ -81,6 +96,10 @@ void Action::loadSettings(QSettings &settings)
   setActiveOnRelease(settings.value(SettingsKeys::ActiveOnRelease, false).toBool());
   setHaveComputers(settings.value(SettingsKeys::HasComputers, false).toBool());
   setRestartServer(settings.value(SettingsKeys::RestartServer, false).toBool());
+  monitorIndex = settings.value("monitorIndex", 0).toInt();
+  monitorSource = settings.value("monitorSource", "usb-c").toString();
+  monitorTool = settings.value("monitorTool").toString();
+  monitorComputer = settings.value("monitorComputer").toString();
 }
 
 void Action::saveSettings(QSettings &settings) const
@@ -101,6 +120,10 @@ void Action::saveSettings(QSettings &settings) const
   settings.setValue(SettingsKeys::ActiveOnRelease, m_activeOnRelease);
   settings.setValue(SettingsKeys::HasComputers, m_hasComputers);
   settings.setValue(SettingsKeys::RestartServer, m_restartServer);
+  settings.setValue("monitorIndex", monitorIndex);
+  settings.setValue("monitorSource", monitorSource);
+  settings.setValue("monitorTool", monitorTool);
+  settings.setValue("monitorComputer", monitorComputer);
 }
 
 int Action::type() const

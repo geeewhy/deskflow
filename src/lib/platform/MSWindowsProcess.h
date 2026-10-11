@@ -40,7 +40,7 @@ public:
 
   /// Launch @p command as a detached process under the active console user's token, so the
   /// child does not inherit the caller's (SYSTEM) privileges.
-  static bool startDetachedAsSessionUser(const std::wstring &command);
+  static bool startDetachedAsSessionUser(const std::wstring &command, bool hidden = false);
 
 private:
   void setStartupInfo(STARTUPINFO &si);

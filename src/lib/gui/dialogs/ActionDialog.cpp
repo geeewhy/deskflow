@@ -15,6 +15,15 @@
 #include "config/ServerConfig.h"
 
 #include <QTimer>
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QFormLayout>
+#include <QLabel>
+#include <QLineEdit>
+#include <QSpinBox>
+#include <QVBoxLayout>
 
 ActionDialog::ActionDialog(QWidget *parent, const ServerConfig &config, Hotkey &hotkey, Action &action)
     : QDialog(parent, Qt::WindowTitleHint | Qt::WindowSystemMenuHint),
@@ -23,6 +32,60 @@ ActionDialog::ActionDialog(QWidget *parent, const ServerConfig &config, Hotkey &
       m_action(action)
 {
   ui->setupUi(this);
+  for (int i = 0; i < ui->comboActionType->count(); ++i)
+    ui->comboActionType->setItemData(i, i);
+  ui->comboActionType->addItem(tr("Switch monitor input (LG)"), static_cast<int>(Action::Type::switchMonitorInput));
+  m_monitorControls = new QWidget(this);
+  auto monitorForm = new QFormLayout(m_monitorControls);
+  m_monitorIndex = new QSpinBox(this);
+  m_monitorIndex->setObjectName("monitorIndex");
+  m_monitorIndex->setRange(0, 31);
+  m_monitorIndex->setValue(m_action.monitorIndex);
+  m_monitorSource = new QComboBox(this);
+  m_monitorSource->setObjectName("monitorSource");
+  m_monitorSource->addItem(tr("HDMI 1"), "hdmi1");
+  m_monitorSource->addItem(tr("USB-C"), "usb-c");
+  m_monitorSource->setCurrentIndex(m_monitorSource->findData(m_action.monitorSource));
+  m_monitorComputer = new QComboBox(this);
+  m_monitorComputer->setObjectName("monitorComputer");
+  m_monitorComputer->addItem(tr("Keep keyboard and mouse on current computer"), QString());
+  for (const auto &computer : config.computers())
+    if (!computer.isNull())
+      m_monitorComputer->addItem(computer.name(), computer.name());
+  m_monitorComputer->setCurrentIndex(qMax(0, m_monitorComputer->findData(m_action.monitorComputer)));
+  m_monitorTool = new QLineEdit(this);
+  m_monitorTool->setObjectName("monitorTool");
+  auto tool = m_action.monitorTool;
+  if (tool.isEmpty()) {
+    tool = QCoreApplication::applicationDirPath() + "/writeValueToDisplay.exe";
+    if (!QFileInfo::exists(tool))
+      tool = QDir::homePath() + "/tools/monitor-control/writeValueToDisplay.exe";
+  }
+  m_monitorTool->setText(tool);
+  auto toolRow = new QWidget(this);
+  auto toolLayout = new QHBoxLayout(toolRow);
+  toolLayout->setContentsMargins(0, 0, 0, 0);
+  toolLayout->addWidget(m_monitorTool);
+  auto browse = new QPushButton(tr("Browse…"), this);
+  toolLayout->addWidget(browse);
+  connect(browse, &QPushButton::clicked, this, [this] {
+    const auto path = QFileDialog::getOpenFileName(this, tr("Select writeValueToDisplay.exe"),
+                                                 m_monitorTool->text(), tr("Executable (*.exe)"));
+    if (!path.isEmpty())
+      m_monitorTool->setText(path);
+  });
+  connect(m_monitorTool, &QLineEdit::textChanged, this, [this] {
+    ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled(canSave());
+  });
+  monitorForm->addRow(tr("Monitor index (starts at 0)"), m_monitorIndex);
+  monitorForm->addRow(tr("Input"), m_monitorSource);
+  monitorForm->addRow(tr("Keyboard and mouse"), m_monitorComputer);
+  monitorForm->addRow(tr("Control utility"), toolRow);
+  auto note = new QLabel(tr("Uses LG proprietary DDC commands, verified on the 27BK67U. Requires a Windows server. "
+                           "The utility runs on the server even while its keyboard and mouse control a client."), this);
+  note->setWordWrap(true);
+  monitorForm->addRow(note);
+  static_cast<QVBoxLayout *>(layout())->insertWidget(2, m_monitorControls);
   connect(ui->keySequenceWidget, &KeySequenceWidget::keySequenceChanged, this, &ActionDialog::keySequenceChanged);
   connect(
       ui->comboActionType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ActionDialog::actionTypeChanged
@@ -37,7 +100,7 @@ ActionDialog::ActionDialog(QWidget *parent, const ServerConfig &config, Hotkey &
   ui->comboSwitchInDirection->setCurrentIndex(m_action.switchDirection());
   ui->comboLockCursorToComputer->setCurrentIndex(m_action.lockCursorMode());
 
-  ui->comboActionType->setCurrentIndex(m_action.type());
+  ui->comboActionType->setCurrentIndex(ui->comboActionType->findData(m_action.type()));
   ui->comboTriggerOn->setCurrentIndex(m_action.activeOnRelease());
 
   for (const Computer &computer : config.computers()) {
@@ -72,7 +135,11 @@ void ActionDialog::accept()
     return;
 
   m_action.setKeySequence(ui->keySequenceWidget->keySequence());
-  m_action.setType(ui->comboActionType->currentIndex());
+  m_action.setType(ui->comboActionType->currentData().toInt());
+  m_action.monitorIndex = m_monitorIndex->value();
+  m_action.monitorSource = m_monitorSource->currentData().toString();
+  m_action.monitorComputer = m_monitorComputer->currentData().toString();
+  m_action.monitorTool = m_monitorTool->text();
 
   m_action.clearComputers();
 
@@ -122,6 +189,7 @@ void ActionDialog::itemToggled() const
 
 void ActionDialog::actionTypeChanged(int index)
 {
+  m_monitorControls->setVisible(ui->comboActionType->currentData().toInt() == static_cast<int>(Action::Type::switchMonitorInput));
   ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled(canSave());
   ui->keySequenceWidget->setVisible(isKeyAction(index));
   ui->groupComputers->setVisible(isKeyAction(index));
@@ -139,6 +207,13 @@ bool ActionDialog::isKeyAction(int index) const
 
 bool ActionDialog::canSave() const
 {
+  if (ui->comboActionType->currentData().toInt() == static_cast<int>(Action::Type::switchMonitorInput)) {
+#ifdef Q_OS_WIN
+    return m_monitorTool && QFileInfo(m_monitorTool->text()).isFile();
+#else
+    return false;
+#endif
+  }
   if (isKeyAction(ui->comboActionType->currentIndex())) {
     const QList<QListWidgetItem *> items = ui->listComputers->findItems("*", Qt::MatchWildcard);
     int totalChecked = 0;

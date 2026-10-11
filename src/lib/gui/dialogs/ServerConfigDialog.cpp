@@ -21,6 +21,9 @@
 
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QCoreApplication>
+#include <QDir>
+#include <QGridLayout>
 
 using enum ComputerConfig::SwitchCorner;
 
@@ -37,6 +40,46 @@ ServerConfigDialog::ServerConfigDialog(QWidget *parent, ServerConfig &config)
       m_buttonBox{new SettingsDialogButtonBox(this)}
 {
   ui->setupUi(this);
+#ifdef Q_OS_WIN
+  auto monitorPresets = new QPushButton(tr("Add HDMI / USB-C hotkeys"), this);
+  monitorPresets->setObjectName("addMonitorHotkeys");
+  monitorPresets->setToolTip(tr("Ctrl+Alt+1: HDMI 1 and this computer. Ctrl+Alt+2: USB-C and the first client. Existing shortcuts are kept."));
+  static_cast<QGridLayout *>(ui->groupHotkeys->layout())->addWidget(monitorPresets, 4, 0, 1, 2);
+  connect(monitorPresets, &QPushButton::clicked, this, [this] {
+    QString client;
+    for (const auto &computer : m_serverConfig.computers())
+      if (!computer.isNull() && !computer.isServer()) { client = computer.name(); break; }
+    auto tool = QCoreApplication::applicationDirPath() + "/writeValueToDisplay.exe";
+    if (!QFileInfo::exists(tool))
+      tool = QDir::homePath() + "/tools/monitor-control/writeValueToDisplay.exe";
+    if (!QFileInfo::exists(tool)) {
+      QMessageBox::warning(this, tr("Control utility required"), tr("Add a hotkey action manually and select writeValueToDisplay.exe."));
+      return;
+    }
+    for (int i = 0; i < 2; ++i) {
+      KeySequence sequence;
+      sequence.appendKey(Qt::Key_Control, Qt::ControlModifier);
+      sequence.appendKey(Qt::Key_Alt, Qt::ControlModifier | Qt::AltModifier);
+      sequence.appendKey(i == 0 ? Qt::Key_1 : Qt::Key_2, Qt::ControlModifier | Qt::AltModifier);
+      bool exists = false;
+      for (const auto &hotkey : m_serverConfig.hotkeys())
+        if (hotkey.keySequence() == sequence) { exists = true; break; }
+      if (exists)
+        continue;
+      Hotkey hotkey;
+      hotkey.setKeySequence(sequence);
+      Action action;
+      action.setType(static_cast<int>(Action::Type::switchMonitorInput));
+      action.monitorSource = i == 0 ? "hdmi1" : "usb-c";
+      action.monitorTool = tool;
+      action.monitorComputer = i == 0 ? m_serverConfig.getServerName() : client;
+      hotkey.addAction(action);
+      m_serverConfig.hotkeys().append(hotkey);
+      ui->listHotkeys->addItem(hotkey.text());
+    }
+    setButtonBoxEnabledButtons();
+  });
+#endif
   m_displayLayout = new DisplayLayoutWidget(m_serverConfig, this);
   ui->tabWidget->addTab(m_displayLayout, tr("Display arrangement"));
   connect(m_displayLayout, &DisplayLayoutWidget::changed, this, &ServerConfigDialog::setButtonBoxEnabledButtons);
@@ -185,7 +228,7 @@ void ServerConfigDialog::listHotkeysSelectionChanged(const QItemSelection &selec
     ui->listActions->clear();
     const Hotkey &hotkey = serverConfig().hotkeys().at(selected.indexes().first().row());
     for (const Action &action : hotkey.actions())
-      ui->listActions->addItem(action.text());
+      ui->listActions->addItem(action.displayText());
   }
 }
 
@@ -202,7 +245,7 @@ void ServerConfigDialog::addAction()
   ActionDialog dlg(this, serverConfig(), hotkey, action);
   if (dlg.exec() == QDialog::Accepted) {
     hotkey.addAction(action);
-    ui->listActions->addItem(action.text());
+    ui->listActions->addItem(action.displayText());
     setButtonBoxEnabledButtons();
   }
 }
@@ -225,7 +268,7 @@ void ServerConfigDialog::editAction()
 
   ActionDialog dlg(this, serverConfig(), hotkey, action);
   if (dlg.exec() == QDialog::Accepted) {
-    ui->listActions->currentItem()->setText(action.text());
+    ui->listActions->currentItem()->setText(action.displayText());
     setButtonBoxEnabledButtons();
   }
 }
