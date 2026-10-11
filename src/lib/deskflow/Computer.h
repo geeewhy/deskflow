@@ -211,6 +211,9 @@ public:
   */
   void fakeInputEnd();
 
+  //! Release tracked injected or local keys before a shared-focus handoff.
+  void releaseKeys();
+
   //! Determine the name of the app causing a secure input state
   /*!
   On MacOS check which app causes a secure input state to be enabled. No

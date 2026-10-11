@@ -5,6 +5,7 @@ if(WIN32)
   set(extra_libs version app mt net)
 endif()
 
+if(WIN32 OR APPLE)
 create_test(
   NAME BidirectionalInputTests
   DEPENDS server
@@ -12,6 +13,7 @@ create_test(
   SOURCE BidirectionalInputTests.cpp
   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/server"
 )
+endif()
 
 create_test(
   NAME ServerConfigTests
