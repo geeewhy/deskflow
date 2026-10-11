@@ -366,6 +366,9 @@ struct Fixture
     InputFilter::Rule host(new InputFilter::KeystrokeCondition(&events, kKeyF1, 0));
     host.adoptAction(new InputFilter::SwitchToComputerAction(&events, "host"), true);
     config.getInputFilter()->addFilterRule(host);
+    InputFilter::Rule release(new InputFilter::KeystrokeCondition(&events, kKeyF3, 0));
+    release.adoptAction(new InputFilter::SwitchToComputerAction(&events, "host"), false);
+    config.getInputFilter()->addFilterRule(release);
     server = std::make_unique<Server>(config, &primary, &computer, &events);
     stream = new TestStream;
     peer = new TestPeer("Mac", stream, server.get(), &events);
@@ -554,6 +557,22 @@ private Q_SLOTS:
       QVERIFY(computer.isOnComputer());
     }
     QVERIFY(computer.isOnComputer());
+  }
+  void pairedHotkeyReleaseCompletesAfterAnotherSourceTakesControl()
+  {
+    Fixture f;
+    SharedInput input;
+    input.kind = Kind::HotkeyDown;
+    input.key = kKeyF3;
+    f.server->receiveInput(f.peer, input);
+    f.switchTo("Mac");
+    auto *down = IPlatformComputer::KeyInfo::alloc('a', 0, 30, 1);
+    f.events.addEvent(Event(EventTypes::KeyStateKeyDown, f.platform, down, Event::EventFlags::DeliverImmediately));
+    f.stream->output.clear();
+    input.kind = Kind::HotkeyUp; // belongs to the earlier press, even with obsolete epoch
+    f.server->receiveInput(f.peer, input);
+    QVERIFY(f.stream->output.contains("COUT"));
+    QVERIFY(!f.peer->trackHotkey(kKeyF3, 0, false));
   }
 
 private:
