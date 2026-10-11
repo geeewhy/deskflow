@@ -374,6 +374,12 @@ void Computer::fakeInputEnd()
   m_computer->fakeInputEnd();
 }
 
+void Computer::releaseKeys()
+{
+  ScopedInputInjection injection(this, m_isPrimary && !m_fakeInput);
+  m_computer->fakeAllKeysUp();
+}
+
 bool Computer::isOnComputer() const
 {
   return m_entered;

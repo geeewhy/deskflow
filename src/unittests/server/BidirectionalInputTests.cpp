@@ -177,6 +177,7 @@ public:
   }
   void fakeAllKeysUp() override
   {
+    calls.push_back("release-keys");
   }
   bool fakeCtrlAltDel() override
   {
@@ -548,6 +549,7 @@ private Q_SLOTS:
       QVERIFY(computer.isOnComputer());
       client.setInputFocus(2, false);
       QVERIFY(!computer.isOnComputer());
+      QVERIFY(platform->calls.contains("release-keys"));
       client.disconnect(nullptr);
       QVERIFY(computer.isOnComputer());
     }

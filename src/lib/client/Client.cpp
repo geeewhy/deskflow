@@ -251,6 +251,8 @@ bool Client::leave()
   }
   m_active = false;
 
+  if (m_bidirectional)
+    m_computer->releaseKeys();
   if (!m_bidirectional || m_computer->isOnComputer())
     m_computer->leave();
 
@@ -426,8 +428,10 @@ void Client::updateCaptureFocus()
   // them while another desktop has the shared focus.
   if (m_localInputFocus && !m_computer->isOnComputer())
     m_computer->enter(0);
-  if (!m_localInputFocus && m_computer->isOnComputer())
+  if (!m_localInputFocus && m_computer->isOnComputer()) {
+    m_computer->releaseKeys();
     m_computer->leave();
+  }
   m_computer->reconfigure(0xf);
 }
 
@@ -688,6 +692,8 @@ void Client::cleanupComputer()
     for (const auto &[id, key] : m_inputHotkeys)
       m_computer->unregisterHotKey(id);
     m_inputHotkeys.clear();
+    if (m_bidirectional)
+      m_computer->releaseKeys();
     m_computer->disable();
     m_ready = false;
   }
