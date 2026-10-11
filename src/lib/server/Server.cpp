@@ -1535,7 +1535,7 @@ void Server::receiveInput(BaseClientProxy *source, const deskflow::SharedInput &
     const bool press = input.kind == HotkeyDown;
     if (!shared || (press && input.epoch != m_seqNum))
       return;
-    if (m_inputOwnership.held() && m_inputOwnership.source() != source->getName())
+    if (press && m_inputOwnership.held() && m_inputOwnership.source() != source->getName())
       return;
     if (shared->trackHotkey(input.key, input.mask, press))
       m_inputFilter->handleRemoteHotkey(input.key, input.mask, press);
