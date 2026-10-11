@@ -324,6 +324,11 @@ void Server::sendConnectedClientsIpc() const
     }
   }
   ipcSendToClient("connectedClients", clientList.join(","));
+  for (const auto &[name, client] : m_clients) {
+    int32_t x, y, width, height;
+    client->getShape(x, y, width, height);
+    ipcSendToClient("desktopSize", QStringLiteral("%1,%2,%3").arg(QString::fromStdString(name)).arg(width).arg(height));
+  }
 }
 
 std::string Server::getName(const BaseClientProxy *client) const

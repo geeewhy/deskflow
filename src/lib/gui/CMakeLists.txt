@@ -40,6 +40,7 @@ add_library(${target} STATIC
   config/ComputerList.h
   config/ServerConfig.cpp
   config/ServerConfig.h
+  config/DisplayLayout.h
   core/CoreProcess.cpp
   core/CoreProcess.h
   core/NetworkMonitor.cpp
@@ -97,6 +98,8 @@ add_library(${target} STATIC
   validators/IpAddressValidator.h
   widgets/ComputerSetupView.cpp
   widgets/ComputerSetupView.h
+  widgets/DisplayLayoutWidget.cpp
+  widgets/DisplayLayoutWidget.h
   widgets/FingerprintPreview.cpp
   widgets/FingerprintPreview.h
   widgets/KeySequenceWidget.cpp

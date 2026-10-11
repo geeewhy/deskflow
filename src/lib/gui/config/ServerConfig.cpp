@@ -52,7 +52,7 @@ bool ServerConfig::save(const QString &fileName) const
 bool ServerConfig::operator==(const ServerConfig &sc) const
 {
   return m_computers == sc.m_computers && //
-         m_Hotkeys == sc.m_Hotkeys;       //
+         m_Hotkeys == sc.m_Hotkeys && useDisplayLayout == sc.useDisplayLayout && displayLayout == sc.displayLayout;
 }
 
 void ServerConfig::save(QFile &file) const
@@ -98,6 +98,17 @@ void ServerConfig::commit()
   }
   settings().endArray();
 
+  settings().setValue("useDisplayLayout", useDisplayLayout);
+  settings().beginWriteArray("displayLayout");
+  int layoutIndex = 0;
+  const auto rectangles = activeDisplayLayout();
+  for (auto it = rectangles.cbegin(); it != rectangles.cend(); ++it) {
+    settings().setArrayIndex(layoutIndex++);
+    settings().setValue("name", it.key());
+    settings().setValue("rectangle", it.value());
+  }
+  settings().endArray();
+
   settings().endGroup();
 }
 
@@ -134,7 +145,57 @@ void ServerConfig::recall()
   }
   settings().endArray();
 
+  useDisplayLayout = settings().value("useDisplayLayout", false).toBool();
+  const int layoutCount = settings().beginReadArray("displayLayout");
+  displayLayout.clear();
+  for (int i = 0; i < layoutCount; ++i) {
+    settings().setArrayIndex(i);
+    const auto rectangle = settings().value("rectangle").toRectF();
+    if (rectangle.width() > 0 && rectangle.height() > 0)
+      displayLayout.insert(settings().value("name").toString(), rectangle);
+  }
+  settings().endArray();
+
   settings().endGroup();
+}
+
+DisplayLayout::Rectangles ServerConfig::activeDisplayLayout() const
+{
+  DisplayLayout::Rectangles result;
+  for (const auto &computer : computers()) {
+    if (!computer.isNull() && displayLayout.contains(computer.name()))
+      result.insert(computer.name(), displayLayout.value(computer.name()));
+  }
+  return result;
+}
+
+void ServerConfig::syncDisplayLayout()
+{
+  auto result = activeDisplayLayout();
+  QStringList missing, orphaned;
+  for (const auto &computer : computers())
+    if (!computer.isNull() && !result.contains(computer.name()))
+      missing.append(computer.name());
+  for (const auto &name : displayLayout.keys())
+    if (!computerExists(name))
+      orphaned.append(name);
+  // Preserve placement for the usual single-computer rename.
+  if (missing.size() == 1 && orphaned.size() == 1)
+    result.insert(missing.first(), displayLayout.value(orphaned.first()));
+  for (qsizetype i = 0; i < computers().size(); ++i) {
+    const auto &computer = computers()[i];
+    if (computer.isNull() || result.contains(computer.name()))
+      continue;
+    QRectF rectangle((i % m_columns) * 1920, (i / m_columns) * 1080, 1920, 1080);
+    if (!displayLayout.isEmpty()) {
+      double right = 0;
+      for (const auto &existing : result)
+        right = qMax(right, existing.right());
+      rectangle.moveTopLeft(QPointF(right, result.isEmpty() ? 0 : result.first().top()));
+    }
+    result.insert(computer.name(), rectangle);
+  }
+  displayLayout = result;
 }
 
 int ServerConfig::adjacentComputerIndex(int idx, int deltaColumn, int deltaRow) const
@@ -158,10 +219,22 @@ int ServerConfig::adjacentComputerIndex(int idx, int deltaColumn, int deltaRow) 
 QTextStream &operator<<(QTextStream &outStream, const ServerConfig &config)
 {
   outStream << "section: links" << Qt::endl;
+  const auto layoutLinks = DisplayLayout::links(config.activeDisplayLayout());
 
   for (int i = 0; const auto &computer : config.computers()) {
     if (!computer.isNull()) {
       outStream << "\t" << computer.name() << ":\n";
+      if (config.useDisplayLayout) {
+        for (const auto &link : layoutLinks) {
+          if (link.source == computer.name())
+            outStream << "\t\t" << link.direction << "(" << QString::number(link.sourceStart, 'g', 12) << ","
+                      << QString::number(link.sourceEnd, 'g', 12) << ") = " << link.target << "("
+                      << QString::number(link.targetStart, 'g', 12) << ","
+                      << QString::number(link.targetEnd, 'g', 12) << ")" << Qt::endl;
+        }
+        ++i;
+        continue;
+      }
       for (const auto &neighbour : std::as_const(neighbourDirs)) {
         int idx = config.adjacentComputerIndex(i, neighbour.x, neighbour.y);
         if (idx != -1 && !config.computers()[idx].isNull())
@@ -204,7 +277,10 @@ void ServerConfig::updateServerName()
 {
   for (auto &computer : computers()) {
     if (computer.isServer()) {
+      const auto previousName = computer.name();
       computer.setName(Settings::value(Settings::Core::ComputerName).toString());
+      if (displayLayout.contains(previousName))
+        displayLayout.insert(computer.name(), displayLayout.take(previousName));
       break;
     }
   }
@@ -260,6 +336,8 @@ void ServerConfig::addClient(const QString &clientName)
   }
 
   m_computers.addComputerByPriority(Computer(clientName));
+  if (useDisplayLayout)
+    syncDisplayLayout();
 }
 
 void ServerConfig::setConfigFile(const QString &configFile) const

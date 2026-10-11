@@ -12,6 +12,7 @@
 #include "common/Hotkey.h"
 #include "gui/config/ComputerConfig.h"
 #include "gui/config/ComputerList.h"
+#include "gui/config/DisplayLayout.h"
 
 #include <QList>
 
@@ -56,6 +57,11 @@ public:
   QString configFile() const;
   bool useExternalConfig() const;
   void addClient(const QString &clientName);
+  bool useDisplayLayout = false;
+  DisplayLayout::Rectangles displayLayout;
+  QMap<QString, QSize> reportedDisplaySizes;
+  void syncDisplayLayout();
+  DisplayLayout::Rectangles activeDisplayLayout() const;
 
 private:
   void recall();
