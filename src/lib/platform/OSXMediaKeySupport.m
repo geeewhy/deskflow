@@ -154,6 +154,9 @@ bool fakeNativeMediaKey(KeyID id)
                                          data2:-1];
   CGEventRef upEvent = [upRef CGEvent];
 
+  // Same injection marker used by the C++ keyboard and mouse paths.
+  CGEventSetIntegerValueField(downEvent, kCGEventSourceUserData, 0x44464c57);
+  CGEventSetIntegerValueField(upEvent, kCGEventSourceUserData, 0x44464c57);
   CGEventPost(0, downEvent);
   CGEventPost(0, upEvent);
 

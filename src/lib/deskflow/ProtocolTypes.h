@@ -8,6 +8,12 @@
 #pragma once
 
 #include <cstdint>
+
+// Fork protocol 1.9 extensions; never sent to peers negotiating <= 1.8.
+extern const char *const kMsgDBidirectionalCapability;
+extern const char *const kMsgDBidirectionalFocus;
+extern const char *const kMsgDBidirectionalInput;
+extern const char *const kMsgDBidirectionalHotkeys;
 /**
  * @file ProtocolTypes.h
  * @brief Deskflow Network Protocol Specification and Implementation
@@ -45,7 +51,7 @@ static const int16_t kProtocolMajorVersion = 1;
  * @note When incrementing the minor version, the Deskflow application version should also increment
  * @since Protocol version 1.0
  */
-static const int16_t kProtocolMinorVersion = 8;
+static const int16_t kProtocolMinorVersion = 9;
 
 /**
  * @brief Default TCP port for Deskflow connections

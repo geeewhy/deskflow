@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: (C) 2026 Deskflow Contributors
+# SPDX-License-Identifier: MIT
+name: Bidirectional input macOS checks
+on:
+  push:
+    branches: [feature/bidirectional-input]
+permissions:
+  contents: read
+concurrency:
+  group: bidirectional-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          cache: true
+      - name: Dependencies
+        run: brew install openssl@3 ninja
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DSKIP_BUILD_TESTS=ON -DBUILD_INSTALLER=OFF -DBUILD_OSX_BUNDLE=OFF
+          -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)"
+      - name: Build
+        run: >-
+          cmake --build build --parallel 3 --target Deskflow deskflow-core
+          BidirectionalInputTests ServerProxyTests ClientProxyTests ServerTests
+          SettingsTests MonitorInputTests DisplayLayoutTests ComputerTests ServerConfigTests
+      - name: Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: >-
+          ctest --test-dir build/src/unittests --output-on-failure
+          -R '^(BidirectionalInputTests|ServerProxyTests|ClientProxyTests|ServerTests|SettingsTests|MonitorInputTests|DisplayLayoutTests|ComputerTests|ServerConfigTests)$'

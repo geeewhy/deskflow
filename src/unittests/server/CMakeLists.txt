@@ -6,6 +6,14 @@ if(WIN32)
 endif()
 
 create_test(
+  NAME BidirectionalInputTests
+  DEPENDS server
+  LIBS client base arch io mt net platform app ${extra_libs}
+  SOURCE BidirectionalInputTests.cpp
+  WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/server"
+)
+
+create_test(
   NAME ServerConfigTests
   DEPENDS server
   LIBS base arch ${extra_libs}

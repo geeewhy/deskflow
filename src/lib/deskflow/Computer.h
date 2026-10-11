@@ -153,7 +153,7 @@ public:
   Synthesize mouse events to generate mouse motion by the relative
   amount \c xRel,yRel.
   */
-  void mouseRelativeMove(int32_t xRel, int32_t yRel) const;
+  void mouseRelativeMove(int32_t xRel, int32_t yRel);
 
   //! Notify of mouse wheel motion
   /*!
@@ -162,7 +162,7 @@ public:
   to the right and negative for motion towards the user or to the left.
   Each wheel click should generate a delta of +/-120.
   */
-  void mouseWheel(int32_t xDelta, int32_t yDelta) const;
+  void mouseWheel(int32_t xDelta, int32_t yDelta);
 
   //! Notify of options changes
   /*!

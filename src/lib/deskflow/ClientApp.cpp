@@ -100,6 +100,11 @@ const char *ClientApp::daemonName() const
 
 deskflow::Computer *ClientApp::createComputer()
 {
+  const auto sharedInput = Settings::value(Settings::Core::BidirectionalInput).toBool();
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MACOS)
+  if (sharedInput)
+    throw std::runtime_error("Bidirectional input currently supports Windows and macOS only");
+#endif
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
   const auto languageSync = Settings::value(Settings::Client::LanguageSync).toBool();
   LOG_INFO("keyboard language sync is %s", languageSync ? "enabled" : "disabled");
@@ -107,11 +112,11 @@ deskflow::Computer *ClientApp::createComputer()
 
 #if defined(Q_OS_WIN)
   return new deskflow::Computer(
-      new MSWindowsComputer(false, Settings::value(Settings::Core::UseHooks).toBool(), getEvents(), languageSync),
+      new MSWindowsComputer(sharedInput, Settings::value(Settings::Core::UseHooks).toBool(), getEvents(), languageSync),
       getEvents()
   );
 #elif defined(Q_OS_MACOS)
-  return new deskflow::Computer(new OSXComputer(getEvents(), false, languageSync), getEvents());
+  return new deskflow::Computer(new OSXComputer(getEvents(), sharedInput, languageSync), getEvents());
 #else
   if (deskflow::platform::isWayland()) {
 #if WINAPI_LIBEI

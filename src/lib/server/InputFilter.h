@@ -58,6 +58,11 @@ public:
     KeyID getKey() const;
     KeyModifierMask getMask() const;
 
+    uint32_t getHotkeyId() const
+    {
+      return m_id;
+    }
+
     // Condition overrides
     Condition *clone() const override;
     std::string format() const override;
@@ -131,11 +136,14 @@ public:
   class SwitchMonitorInputAction : public Action
   {
   public:
-    SwitchMonitorInputAction(IEventQueue *events, int monitor, const std::string &source,
-                             const std::string &tool, const std::string &computer);
+    SwitchMonitorInputAction(
+        IEventQueue *events, int monitor, const std::string &source, const std::string &tool,
+        const std::string &computer
+    );
     Action *clone() const override;
     std::string format() const override;
     void perform(const Event &) override;
+
   private:
     IEventQueue *m_events;
     int m_monitor;
@@ -404,6 +412,7 @@ public:
 
   // get number of rules
   uint32_t getNumRules() const;
+  bool handleRemoteHotkey(KeyID key, KeyModifierMask mask, bool press);
 
   //! Compare filters
   bool operator==(const InputFilter &) const;

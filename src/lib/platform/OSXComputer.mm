@@ -7,6 +7,7 @@
  */
 
 #include "platform/OSXComputer.h"
+#include "deskflow/BidirectionalInput.h"
 
 #include "arch/Arch.h"
 #include "arch/ArchException.h"
@@ -496,6 +497,7 @@ void OSXComputer::postMouseEvent(CGPoint &pos) const
   CGEventSetDoubleValueField(event, kCGMouseEventDeltaX, deltaFX);
   CGEventSetDoubleValueField(event, kCGMouseEventDeltaY, deltaFY);
 
+  CGEventSetIntegerValueField(event, kCGEventSourceUserData, deskflow::kInputEventTag);
   CGEventPost(kCGHIDEventTap, event);
 
   CFRelease(event);
@@ -579,6 +581,7 @@ void OSXComputer::fakeMouseButton(ButtonID id, bool press)
   CGEventSetFlags(event, modifiers);
 
   m_buttonState.set(index, state);
+  CGEventSetIntegerValueField(event, kCGEventSourceUserData, deskflow::kInputEventTag);
   CGEventPost(kCGHIDEventTap, event);
 
   CFRelease(event);
@@ -638,6 +641,7 @@ void OSXComputer::fakeMouseWheel(ScrollDelta delta) const
     CGEventFlags modifiers = m_keyState->getModifierStateAsOSXFlags();
     CGEventSetFlags(scrollEvent, modifiers);
 
+    CGEventSetIntegerValueField(scrollEvent, kCGEventSourceUserData, deskflow::kInputEventTag);
     CGEventPost(kCGHIDEventTap, scrollEvent);
     CFRelease(scrollEvent);
   }
@@ -1679,6 +1683,8 @@ OSXComputer::handleCGInputEventSecondary(CGEventTapProxy proxy, CGEventType type
 CGEventRef OSXComputer::handleCGInputEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *refcon)
 {
   OSXComputer *computer = (OSXComputer *)refcon;
+  if (event && CGEventGetIntegerValueField(event, kCGEventSourceUserData) == deskflow::kInputEventTag)
+    return event;
 
   switch (type) {
   case kCGEventLeftMouseDown:
