@@ -9,6 +9,7 @@
 #include "client/ServerProxy.h"
 
 #include "base/IEventQueue.h"
+#include "base/InputTiming.h"
 #include "base/Log.h"
 #include "client/Client.h"
 #include "deskflow/Clipboard.h"
@@ -78,6 +79,10 @@ void ServerProxy::setKeepAliveRate(double rate)
 
 void ServerProxy::handleData()
 {
+  static thread_local InputTiming timing("client-receive-batch");
+  InputTiming::Scope measurement(timing, m_stream->getSize());
+  const auto batchStarted = InputTiming::Clock::now();
+  unsigned messages = 0;
   // handle messages until there are no more.  first read message code.
   uint8_t code[4];
   uint32_t n = m_stream->read(code, 4);
@@ -112,6 +117,17 @@ void ServerProxy::handleData()
       LOG_ERR("protocol error from server: %s", e.what());
       ProtocolUtil::writef(m_stream, kMsgEBad);
       requestDisconnect("invalid message from server");
+      return;
+    }
+
+    // Do not wait for an indefinitely busy stream to empty before displaying
+    // the newest position. Flush at a message boundary and yield to the event
+    // loop, so native input and timers also get a turn. Explicitly reschedule:
+    // buffered bytes need not cause another socket-read readiness notification.
+    if (++messages >= 64 || InputTiming::Clock::now() - batchStarted >= std::chrono::milliseconds(2)) {
+      flushCompressedMouse();
+      if (m_stream->isReady())
+        m_events->addEvent(Event(EventTypes::StreamInputReady, m_stream->getEventTarget()));
       return;
     }
 

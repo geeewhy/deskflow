@@ -246,6 +246,19 @@ public:
   }
 };
 
+class CountingServerProxy : public ServerProxy
+{
+public:
+  using ServerProxy::ServerProxy;
+  unsigned parsed = 0;
+protected:
+  ConnectionResult parseHandshakeMessage(const uint8_t *) override
+  {
+    ++parsed;
+    return ConnectionResult::Okay;
+  }
+};
+
 Client *undereferenceableClient()
 {
   // These paths must queue cleanup without calling through to Client.
@@ -326,6 +339,30 @@ void ServerProxyTests::parseHandshakeMessage_protocolError_queuesRefusalRequest(
   QVERIFY(request->kind() == Client::DisconnectRequest::Kind::Refuse);
   QVERIFY(request->refusalReason() == deskflow::core::ConnectionRefusal::ProtocolError);
   QCOMPARE(QString::fromUtf8(request->message()), QStringLiteral("server reported a protocol error"));
+}
+
+void ServerProxyTests::handleData_busyStreamYieldsAndReschedules()
+{
+  RecordingEventQueue events;
+  FakeStream stream;
+  for (int i = 0; i < 130; ++i)
+    stream.push("TEST");
+  CountingServerProxy proxy(undereferenceableClient(), &stream, &events);
+  QVERIFY(events.dispatchEvent(Event(EventTypes::StreamInputReady, stream.getEventTarget())));
+  QVERIFY(proxy.parsed > 0 && proxy.parsed <= 64);
+  QVERIFY(stream.isReady());
+  QCOMPARE(events.addedEvents().size(), size_t(1));
+  // No new socket notification: queued continuations must finish the work.
+  for (size_t i = 0; i < events.addedEvents().size(); ++i) {
+    QVERIFY(i < 130);
+    const auto type = events.addedEvents()[i].getType();
+    auto *target = events.addedEvents()[i].getTarget();
+    QCOMPARE(type, EventTypes::StreamInputReady);
+    QCOMPARE(target, stream.getEventTarget());
+    QVERIFY(events.dispatchEvent(Event(type, target)));
+  }
+  QCOMPARE(proxy.parsed, 130u);
+  QVERIFY(!stream.isReady());
 }
 
 QTEST_MAIN(ServerProxyTests)

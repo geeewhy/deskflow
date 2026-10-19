@@ -898,6 +898,15 @@ bool MSWindowsComputer::onPreDispatchPrimary(HWND, UINT message, WPARAM wParam, 
   case DESKFLOW_MSG_MOUSE_MOVE:
     return onMouseMove(static_cast<int32_t>(wParam), static_cast<int32_t>(lParam));
 
+  case DESKFLOW_MSG_MOUSE_RELATIVE:
+    if (!ignore() && !m_isOnComputer) {
+      sendEvent(
+          EventTypes::PrimaryComputerMotionOnSecondary,
+          MotionInfo::alloc(static_cast<int32_t>(wParam), static_cast<int32_t>(lParam))
+      );
+    }
+    return true;
+
   case DESKFLOW_MSG_MOUSE_WHEEL:
     return onMouseWheel(static_cast<int32_t>(lParam), static_cast<int32_t>(wParam));
 
@@ -1215,16 +1224,8 @@ bool MSWindowsComputer::onMouseButton(WPARAM wParam, LPARAM lParam)
   return true;
 }
 
-// here's how mouse movements are sent across the network to a client:
-//   1. deskflow checks the mouse position on server computer
-//   2. records the delta (current x,y minus last x,y)
-//   3. records the current x,y as "last" (so we can calc delta next time)
-//   4. on the server, puts the cursor back to the center of the computer
-//      - remember the cursor is hidden on the server at this point
-//      - this actually records the current x,y as "last" a second time (it
-//      seems)
-//   5. sends the delta movement to the client (could be +1,+1 or -1,+4 for
-//   example)
+// Absolute positions are only emitted while watching the local screen.
+// Remote motion is captured as deltas in the hook, before it is queued.
 bool MSWindowsComputer::onMouseMove(int32_t mx, int32_t my)
 {
   // compute motion delta (relative to the last known
@@ -1236,39 +1237,14 @@ bool MSWindowsComputer::onMouseMove(int32_t mx, int32_t my)
 
   // ignore if the mouse didn't move or if message posted prior
   // to last mark change.
-  if (ignore() || (x == 0 && y == 0)) {
+  if (ignore() || !m_isOnComputer || (x == 0 && y == 0)) {
     return true;
   }
 
   // save position to compute delta of next motion
   saveMousePosition(mx, my);
 
-  if (m_isOnComputer) {
-    // motion on primary computer
-    sendEvent(EventTypes::PrimaryComputerMotionOnPrimary, MotionInfo::alloc(m_xCursor, m_yCursor));
-  } else {
-    // the motion is on the secondary computer, so we warp mouse back to
-    // center on the server computer. if we don't do this, then the mouse
-    // will always try to return to the original entry point on the
-    // secondary computer.
-    LOG_VERBOSE("centering cursor on motion: %+d,%+d", m_xCenter, m_yCenter);
-    warpCursorNoFlush(m_xCenter, m_yCenter);
-
-    // examine the motion.  if it's about the distance
-    // from the center of the computer to an edge then
-    // it's probably a bogus motion that we want to
-    // ignore (see warpCursorNoFlush() for a further
-    // description).
-    static int32_t bogusZoneSize = 10;
-    if (-x + bogusZoneSize > m_xCenter - m_x || x + bogusZoneSize > m_x + m_w - m_xCenter ||
-        -y + bogusZoneSize > m_yCenter - m_y || y + bogusZoneSize > m_y + m_h - m_yCenter) {
-
-      LOG_DEBUG("dropped bogus delta motion: %+d,%+d", x, y);
-    } else {
-      // send motion
-      sendEvent(EventTypes::PrimaryComputerMotionOnSecondary, MotionInfo::alloc(x, y));
-    }
-  }
+  sendEvent(EventTypes::PrimaryComputerMotionOnPrimary, MotionInfo::alloc(m_xCursor, m_yCursor));
 
   return true;
 }

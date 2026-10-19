@@ -28,6 +28,7 @@
 #include "mt/Mutex.h"
 #include "mt/Thread.h"
 #include "platform/OSXClipboard.h"
+#include "platform/OSXCocoaApp.h"
 #include "platform/OSXEventQueueBuffer.h"
 #include "platform/OSXKeyState.h"
 #include "platform/OSXMediaKeySupport.h"
@@ -795,6 +796,7 @@ void OSXComputer::disable()
 
 void OSXComputer::enter()
 {
+  const bool wasOnComputer = m_isOnComputer;
   m_isOnComputer = true;
   showCursor();
 
@@ -815,6 +817,8 @@ void OSXComputer::enter()
 
     avoidSupression();
   }
+  if (!wasOnComputer)
+    showScreenEntryCue(m_xCursor, m_yCursor);
 }
 
 bool OSXComputer::canLeave()
@@ -824,6 +828,7 @@ bool OSXComputer::canLeave()
 
 void OSXComputer::leave()
 {
+  hideScreenEntryCue();
   hideCursor();
 
   if (m_isPrimary) {

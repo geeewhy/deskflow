@@ -8,6 +8,7 @@
 #include "platform/MSWindowsHook.h"
 #include "base/DirectionTypes.h"
 #include "base/Log.h"
+#include "base/InputTiming.h"
 #include "deskflow/BidirectionalInput.h"
 #include "deskflow/DisplayException.h"
 
@@ -490,8 +491,12 @@ static LRESULT CALLBACK keyboardLLHook(int code, WPARAM wParam, LPARAM lParam)
 // events very early.  the earlier the better.
 //
 
-static bool mouseHookHandler(WPARAM wParam, int32_t x, int32_t y, int32_t data)
+bool MSWindowsHook::mouseHookHandler(
+    WPARAM wParam, int32_t x, int32_t y, int32_t data, BOOL (WINAPI *getCursorPosition)(LPPOINT)
+)
 {
+  static thread_local InputTiming timing("windows-capture-hook");
+  InputTiming::Scope measurement(timing);
   switch (wParam) {
   case WM_LBUTTONDOWN:
   case WM_MBUTTONDOWN:
@@ -538,8 +543,17 @@ static bool mouseHookHandler(WPARAM wParam, int32_t x, int32_t y, int32_t data)
   case WM_NCMOUSEMOVE:
   case WM_MOUSEMOVE:
     if (g_mode == kHOOK_RELAY_EVENTS) {
-      // relay and eat event
-      PostThreadMessage(g_threadID, DESKFLOW_MSG_MOUSE_MOVE, x, y);
+      // The hook suppresses this movement, so the next event's coordinates
+      // are relative to the actual cursor, not to this event's proposed
+      // position. Capture the delta now, before the queued event can race
+      // with another move or a screen transition. No per-event warp is needed.
+      POINT cursor;
+      if (getCursorPosition(&cursor)) {
+        const auto dx = x - cursor.x;
+        const auto dy = y - cursor.y;
+        if (dx != 0 || dy != 0)
+          PostThreadMessage(g_threadID, DESKFLOW_MSG_MOUSE_RELATIVE, dx, dy);
+      }
       return true;
     } else if (g_mode == kHOOK_WATCH_JUMP_ZONE) {
       // low level hooks can report bogus mouse positions that are
@@ -595,7 +609,7 @@ static bool mouseHookHandler(WPARAM wParam, int32_t x, int32_t y, int32_t data)
   return false;
 }
 
-static LRESULT CALLBACK mouseLLHook(int code, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK MSWindowsHook::mouseLLHook(int code, WPARAM wParam, LPARAM lParam)
 {
   if (code >= 0) {
     // decode the message

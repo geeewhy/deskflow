@@ -140,6 +140,7 @@ public:
   void fakeMouseButton(ButtonID, bool press) override
   {
     calls.push_back(press ? "button-down" : "button-up");
+    buttonPositions.emplace_back(cursorX, cursorY);
   }
   void fakeMouseMove(int32_t x, int32_t y) override
   {
@@ -256,6 +257,7 @@ public:
   }
   int32_t cursorX = 960, cursorY = 540;
   mutable QStringList calls;
+  std::vector<std::pair<int32_t, int32_t>> buttonPositions;
 
 protected:
   void updateButtons() override
@@ -322,6 +324,16 @@ public:
   IListenSocket *createListen(IArchNetwork::AddressFamily, SecurityLevel) const override
   {
     return nullptr;
+  }
+};
+class MotionServerProxy : public ServerProxy
+{
+public:
+  using ServerProxy::ServerProxy;
+protected:
+  ConnectionResult parseHandshakeMessage(const uint8_t *code) override
+  {
+    return parseMessage(code);
   }
 };
 class TestPeer : public ClientProxy1_9
@@ -557,6 +569,40 @@ private Q_SLOTS:
       QVERIFY(computer.isOnComputer());
     }
     QVERIFY(computer.isOnComputer());
+  }
+  void receiveBatchFlushesMotionBeforeYieldAndPreservesClickPosition()
+  {
+    TestQueue events;
+    auto *platform = new TestPlatform(&events);
+    deskflow::Computer computer(platform, &events);
+    Client client(&events, "Mac", NetworkAddress(), new TestSocketFactory, &computer);
+    client.setBidirectionalAllowed(true);
+    client.handshakeComplete();
+    client.enter(0, 0, 1, 0, false);
+    platform->calls.clear();
+    TestStream wire;
+    MotionServerProxy proxy(&client, &wire, &events);
+    for (int x = 1; x <= 130; ++x)
+      ProtocolUtil::writef(&wire, kMsgDMouseMove, x, 20);
+    ProtocolUtil::writef(&wire, kMsgDMouseDown, 1);
+    ProtocolUtil::writef(&wire, kMsgDMouseMove, 150, 30);
+    ProtocolUtil::writef(&wire, kMsgDMouseUp, 1);
+    wire.input = wire.output;
+    wire.output.clear();
+    QVERIFY(events.dispatchEvent(Event(EventTypes::StreamInputReady, wire.getEventTarget())));
+    QVERIFY(wire.isReady());
+    QVERIFY(platform->cursorX > 0 && platform->cursorX <= 64);
+    // The fake queue discards deferred events; explicitly dispatch each turn.
+    for (int i = 0; wire.isReady() && i < 134; ++i)
+      QVERIFY(events.dispatchEvent(Event(EventTypes::StreamInputReady, wire.getEventTarget())));
+    QVERIFY(!wire.isReady());
+    QCOMPARE(platform->cursorX, 150);
+    QCOMPARE(platform->cursorY, 30);
+    QCOMPARE(platform->buttonPositions.size(), size_t(2));
+    QCOMPARE(platform->buttonPositions[0].first, 130);
+    QCOMPARE(platform->buttonPositions[0].second, 20);
+    QCOMPARE(platform->buttonPositions[1].first, 150);
+    QCOMPARE(platform->buttonPositions[1].second, 30);
   }
   void pairedHotkeyReleaseCompletesAfterAnotherSourceTakesControl()
   {

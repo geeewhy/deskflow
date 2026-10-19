@@ -14,6 +14,8 @@ extern "C"
 #endif
   void runCocoaApp();
   void stopCocoaLoop();
+  void showScreenEntryCue(double x, double y);
+  void hideScreenEntryCue();
 
 #if defined(__cplusplus)
 }
