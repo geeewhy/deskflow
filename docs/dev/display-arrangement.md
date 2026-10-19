@@ -11,8 +11,8 @@ pixel densities. Physical dimensions (for example millimetres) are more useful
 for aligning differently sized or scaled displays on a desk. The initial sizes
 are placeholders; enter the dimensions appropriate for your setup.
 
-Touching edges generate reciprocal partial-edge links using Deskflow's existing
-configuration format. Gaps, corner-only contact, overlaps and disconnected
+Aligned edges, including those separated by gaps, generate partial-edge links using Deskflow's existing
+configuration format. Each edge segment links to the nearest screen in that direction, preserving its aligned entry position. Closer screens block farther screens only over their shared span. Corner-only contact, overlaps and disconnected
 groups cannot be saved while this mode is enabled. Turning the mode off returns
 to the grid links and retains the manual dimensions for later use.
 

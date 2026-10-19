@@ -137,7 +137,7 @@ DisplayLayoutWidget::DisplayLayoutWidget(ServerConfig &config, QWidget *parent)
   m_enabled->setObjectName("useDisplayLayout");
   layout->addWidget(m_enabled);
   auto explanation = new QLabel(tr("Use the same units for every computer: pixels, or physical dimensions such as millimetres. "
-                                   "Drag rectangles until their edges touch; only the green portions allow crossings. "
+                                   "Align rectangles along an edge; gaps are allowed. Green portions show crossings to the nearest screen. "
                                    "Each rectangle represents a computer's whole desktop. Use its reported pixel size or enter dimensions manually."), this);
   explanation->setWordWrap(true);
   layout->addWidget(explanation);

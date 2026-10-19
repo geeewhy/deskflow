@@ -58,11 +58,45 @@ private Q_SLOTS:
   void invalidArrangements()
   {
     QVERIFY(!DisplayLayout::validationError({{"a", {0, 0, 100, 100}}, {"b", {99, 0, 100, 100}}}).isEmpty());
-    QVERIFY(!DisplayLayout::validationError({{"a", {0, 0, 100, 100}}, {"b", {101, 0, 100, 100}}}).isEmpty());
+    QVERIFY(DisplayLayout::validationError({{"a", {0, 0, 100, 100}}, {"b", {101, 0, 100, 100}}}).isEmpty());
     const DisplayLayout::Rectangles corner{{"a", {0, 0, 100, 100}}, {"b", {100, 100, 100, 100}}};
     QVERIFY(DisplayLayout::links(corner).isEmpty());
     QVERIFY(!DisplayLayout::validationError(corner).isEmpty());
     QVERIFY(!DisplayLayout::validationError({{"a", {0, 0, 0, 100}}}).isEmpty());
+  }
+  void gapsAndOcclusion()
+  {
+    const DisplayLayout::Rectangles rectangles{
+        {"host", {0, -100, 400, 100}}, {"personal", {0, 0, 100, 100}},
+        {"geewhy", {150, 25, 100, 50}}, {"far", {300, 0, 100, 100}}};
+    QVERIFY(DisplayLayout::validationError(rectangles).isEmpty());
+    const auto links = DisplayLayout::links(rectangles);
+    QList<DisplayLayout::Link> right;
+    for (const auto &link : links) {
+      if (link.source == "personal" && link.direction == "right")
+        right.append(link);
+    }
+    QCOMPARE(right.size(), 3);
+    QCOMPARE(right[0].target, "geewhy");
+    QCOMPARE(right[0].sourceStart, 25.0);
+    QCOMPARE(right[0].sourceEnd, 75.0);
+    QCOMPARE(right[0].targetStart, 0.0);
+    QCOMPARE(right[0].targetEnd, 100.0);
+    QCOMPARE(right[1].target, "far");
+    QCOMPARE(right[1].sourceStart, 0.0);
+    QCOMPARE(right[1].sourceEnd, 25.0);
+    QCOMPARE(right[1].targetEnd, 25.0);
+    QCOMPARE(right[2].sourceStart, 75.0);
+    QCOMPARE(right[2].sourceEnd, 100.0);
+    for (const auto &link : links) {
+      if (link.source == "geewhy" && link.direction == "left") {
+        QCOMPARE(link.target, "personal");
+        QCOMPARE(link.targetStart, 25.0);
+        QCOMPARE(link.targetEnd, 75.0);
+        return;
+      }
+    }
+    QFAIL("Missing reciprocal crossing across the gap");
   }
   void persistenceAndCoreMapping()
   {
@@ -74,7 +108,7 @@ private Q_SLOTS:
     ServerConfig config;
     config.addClient("Mac");
     config.useDisplayLayout = true;
-    config.displayLayout = {{"LG", {0, 0, 600, 340}}, {"Mac", {200, 340, 300, 200}}};
+    config.displayLayout = {{"LG", {0, 0, 600, 340}}, {"Mac", {200, 390, 300, 200}}};
     config.commit();
     ServerConfig restored;
     QVERIFY(restored.useDisplayLayout);
