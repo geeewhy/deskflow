@@ -3,6 +3,13 @@
 
 if (WIN32)
   create_test(
+    NAME MSWindowsBitmapTests
+    DEPENDS platform
+    LIBS base arch
+    SOURCE MSWindowsBitmapTests.cpp
+    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/platform"
+  )
+  create_test(
     NAME MSWindowsHookTests
     DEPENDS platform
     LIBS base arch app
@@ -17,6 +24,13 @@ if (WIN32)
     WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/platform"
   )
 elseif(APPLE)
+  create_test(
+    NAME OSXClipboardImageTests
+    DEPENDS platform
+    LIBS base arch Qt6::Gui
+    SOURCE OSXClipboardImageTests.cpp
+    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/platform"
+  )
   create_test(
     NAME OSXClipboardTests
     DEPENDS platform

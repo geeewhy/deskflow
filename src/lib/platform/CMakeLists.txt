@@ -73,6 +73,8 @@ elseif(APPLE)
     OSXClipboardAnyTextConverter.h
     OSXClipboardBMPConverter.cpp
     OSXClipboardBMPConverter.h
+    OSXClipboardImageConverter.h
+    OSXClipboardImageConverter.mm
     OSXClipboardHTMLConverter.cpp
     OSXClipboardHTMLConverter.h
     OSXClipboardTextConverter.cpp
@@ -188,6 +190,7 @@ if(UNIX)
   if(APPLE)
     find_library(COCOA_LIBRARY Cocoa)
     target_link_libraries(platform PUBLIC ${COCOA_LIBRARY})
+    target_link_libraries(platform PRIVATE Qt6::Gui)
   else()
     if(${LIBXKBCOMMON_VERSION} VERSION_GREATER_EQUAL "1.10")
       target_compile_definitions(platform PRIVATE HAVE_XKB_KEYMAP_MOD_GET_MASK=1)

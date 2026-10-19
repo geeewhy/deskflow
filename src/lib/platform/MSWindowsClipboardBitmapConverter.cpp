@@ -144,7 +144,8 @@ std::string MSWindowsClipboardBitmapConverter::toIClipboard(HANDLE data) const
   // find the start of the pixel data
   const char *srcBits = (const char *)bitmap + bitmap->bmiHeader.biSize;
   if (bitmap->bmiHeader.biBitCount >= 16) {
-    if (bitmap->bmiHeader.biCompression == BI_BITFIELDS &&
+    // V4/V5 headers already include masks; only INFOHEADER stores them after it.
+    if (bitmap->bmiHeader.biSize == sizeof(BITMAPINFOHEADER) && bitmap->bmiHeader.biCompression == BI_BITFIELDS &&
         (bitmap->bmiHeader.biBitCount == 16 || bitmap->bmiHeader.biBitCount == 32)) {
       srcBits += 3 * sizeof(DWORD);
     }
