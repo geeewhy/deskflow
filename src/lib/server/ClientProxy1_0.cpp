@@ -7,6 +7,7 @@
  */
 
 #include "server/ClientProxy1_0.h"
+#include "base/InputTiming.h"
 
 #include "base/IEventQueue.h"
 #include "base/Log.h"
@@ -289,6 +290,8 @@ void ClientProxy1_0::mouseUp(ButtonID button)
 
 void ClientProxy1_0::mouseMove(int32_t xAbs, int32_t yAbs)
 {
+  static thread_local InputTiming timing("server-enqueue-absolute");
+  InputTiming::Scope measurement(timing);
   LOG_VERBOSE("send mouse move to \"%s\" %d,%d", getName().c_str(), xAbs, yAbs);
   ProtocolUtil::writef(getStream(), kMsgDMouseMove, xAbs, yAbs);
 }

@@ -10,6 +10,7 @@
 
 #include "arch/Arch.h"
 #include "base/IEventQueue.h"
+#include "base/InputTiming.h"
 #include "base/Log.h"
 #include "client/ServerProxy.h"
 #include "client/ServerProxy1_7.h"
@@ -314,11 +315,15 @@ void Client::mouseUp(ButtonID id)
 
 void Client::mouseMove(int32_t x, int32_t y)
 {
+  static thread_local InputTiming timing("client-inject-absolute");
+  InputTiming::Scope measurement(timing);
   m_computer->mouseMove(x, y);
 }
 
 void Client::mouseRelativeMove(int32_t dx, int32_t dy)
 {
+  static thread_local InputTiming timing("client-inject-relative");
+  InputTiming::Scope measurement(timing);
   m_computer->mouseRelativeMove(dx, dy);
 }
 
