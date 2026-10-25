@@ -78,6 +78,7 @@ public:
     inline static const auto AutoUpdateCheck = QStringLiteral("gui/enableUpdateCheck");
     inline static const auto UpdateCheckUrl = QStringLiteral("gui/updateCheckUrl");
     inline static const auto CloseReminder = QStringLiteral("gui/closeReminder");
+    inline static const auto StopOnQuit = QStringLiteral("gui/stopOnQuit");
     inline static const auto CloseToTray = QStringLiteral("gui/closeToTray");
     inline static const auto LogExpanded = QStringLiteral("gui/logExpanded");
     inline static const auto SymbolicTrayIcon = QStringLiteral("gui/symbolicTrayIcon");
@@ -309,6 +310,7 @@ private:
     , Gui::AutoUpdateCheck
     , Gui::UpdateCheckUrl
     , Gui::CloseReminder
+    , Gui::StopOnQuit
     , Gui::CloseToTray
     , Gui::LogExpanded
     , Gui::SymbolicTrayIcon
@@ -371,6 +373,7 @@ private:
   // When checking the default values this list contains the ones that default to true.
   inline static const QStringList m_defaultTrueValues = {
       Core::UseHooks
+    , Gui::StopOnQuit
     , Gui::CloseToTray
     , Gui::CloseReminder
     , Gui::LogExpanded

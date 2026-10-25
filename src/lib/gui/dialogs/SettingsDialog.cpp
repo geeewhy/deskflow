@@ -128,6 +128,7 @@ void SettingsDialog::initConnections() const
   connect(ui->rbAutoHide, &QRadioButton::toggled, this, &SettingsDialog::setButtonBoxEnabledButtons);
   connect(ui->cbPreventSleep, &QCheckBox::toggled, this, &SettingsDialog::setButtonBoxEnabledButtons);
   connect(ui->cbBidirectionalInput, &QCheckBox::toggled, this, &SettingsDialog::setButtonBoxEnabledButtons);
+  connect(ui->cbStopOnQuit, &QCheckBox::toggled, this, &SettingsDialog::setButtonBoxEnabledButtons);
   connect(ui->rbCloseToTray, &QRadioButton::toggled, this, &SettingsDialog::setButtonBoxEnabledButtons);
   connect(ui->cbElevateDaemon, &QCheckBox::toggled, this, &SettingsDialog::setButtonBoxEnabledButtons);
   connect(ui->cbAutoUpdate, &QCheckBox::toggled, this, &SettingsDialog::setButtonBoxEnabledButtons);
@@ -234,6 +235,7 @@ void SettingsDialog::accept()
   Settings::setValue(Settings::Security::Certificate, ui->lineTlsCertPath->text());
   Settings::setValue(Settings::Security::KeySize, ui->comboTlsKeyLength->currentText().toInt());
   Settings::setValue(Settings::Security::TlsEnabled, ui->groupSecurity->isChecked());
+  Settings::setValue(Settings::Gui::StopOnQuit, ui->cbStopOnQuit->isChecked());
   Settings::setValue(Settings::Gui::CloseToTray, ui->rbCloseToTray->isChecked());
   Settings::setValue(Settings::Gui::SymbolicTrayIcon, ui->rbIconMono->isChecked());
   Settings::setValue(Settings::Security::CheckPeers, ui->cbRequireClientCert->isChecked());
@@ -289,6 +291,7 @@ void SettingsDialog::loadFromConfig()
   ui->rbAutoHide->setChecked(autoHide);
   ui->rbShowOnStart->setChecked(!autoHide);
 
+  ui->cbStopOnQuit->setChecked(Settings::value(Settings::Gui::StopOnQuit).toBool());
   const auto closeToTray = Settings::value(Settings::Gui::CloseToTray).toBool();
   ui->rbCloseToTray->setChecked(closeToTray);
   ui->rbExitOnClose->setChecked(!closeToTray);
@@ -392,6 +395,7 @@ void SettingsDialog::updateControls()
 #endif
   ui->lineTlsCertPath->setEnabled(writable);
   ui->comboTlsKeyLength->setEnabled(writable);
+  ui->cbStopOnQuit->setEnabled(writable);
   ui->rbCloseToTray->setEnabled(writable);
   ui->rbExitOnClose->setEnabled(writable);
   ui->cbRunEnterCommand->setEnabled(writable);
@@ -438,6 +442,7 @@ bool SettingsDialog::isModified() const
       (ui->rbAutoHide->isChecked() != Settings::value(Settings::Gui::Autohide).toBool()) ||
       (ui->cbPreventSleep->isChecked() != Settings::value(Settings::Core::PreventSleep).toBool()) ||
       (ui->cbBidirectionalInput->isChecked() != Settings::value(Settings::Core::BidirectionalInput).toBool()) ||
+      (ui->cbStopOnQuit->isChecked() != Settings::value(Settings::Gui::StopOnQuit).toBool()) ||
       (ui->rbCloseToTray->isChecked() != Settings::value(Settings::Gui::CloseToTray).toBool()) ||
       (ui->cbElevateDaemon->isChecked() != Settings::value(Settings::Daemon::Elevate).toBool()) ||
       (ui->cbAutoUpdate->isChecked() != Settings::value(Settings::Gui::AutoUpdateCheck).toBool()) ||
@@ -474,6 +479,7 @@ bool SettingsDialog::isDefault() const
       (ui->rbAutoHide->isChecked() == Settings::defaultValue(Settings::Gui::Autohide).toBool()) &&
       (ui->cbPreventSleep->isChecked() == Settings::defaultValue(Settings::Core::PreventSleep).toBool()) &&
       (ui->cbBidirectionalInput->isChecked() == Settings::defaultValue(Settings::Core::BidirectionalInput).toBool()) &&
+      (ui->cbStopOnQuit->isChecked() == Settings::defaultValue(Settings::Gui::StopOnQuit).toBool()) &&
       (ui->rbCloseToTray->isChecked() == Settings::defaultValue(Settings::Gui::CloseToTray).toBool()) &&
       (ui->cbElevateDaemon->isChecked() == Settings::defaultValue(Settings::Daemon::Elevate).toBool()) &&
       (ui->cbAutoUpdate->isChecked() == Settings::defaultValue(Settings::Gui::AutoUpdateCheck).toBool()) &&
@@ -517,6 +523,7 @@ void SettingsDialog::resetToDefault()
   ui->rbCloseToTray->setChecked(autoHide);
   ui->rbExitOnClose->setChecked(!autoHide);
 
+  ui->cbStopOnQuit->setChecked(Settings::defaultValue(Settings::Gui::StopOnQuit).toBool());
   const auto closeToTray = Settings::defaultValue(Settings::Gui::CloseToTray).toBool();
   ui->rbCloseToTray->setChecked(closeToTray);
   ui->rbExitOnClose->setChecked(!closeToTray);

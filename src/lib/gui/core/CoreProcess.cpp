@@ -6,6 +6,7 @@
  */
 
 #include "CoreProcess.h"
+#include <QEventLoop>
 
 #include "common/ExitCodes.h"
 #include "gui/ipc/CoreIpcClient.h"
@@ -574,11 +575,30 @@ void CoreProcess::restart()
 void CoreProcess::cleanup()
 {
   qInfo("cleaning up core process");
+  m_retryTimer.stop();
 
   const auto isDesktop = Settings::value(Settings::Core::ProcessMode).value<ProcessMode>() == ProcessMode::Desktop;
-  const auto isRunning = m_processState == ProcessState::Started;
-  if (isDesktop && isRunning) {
+  if (isDesktop && m_processState != ProcessState::Stopped) {
     stop();
+  } else if (!isDesktop && Settings::value(Settings::Gui::StopOnQuit).toBool()) {
+    // Cleanup runs after the application's main event loop exits. Allow a
+    // disconnected daemon client to complete its handshake and deliver Stop.
+    QEventLoop shutdownLoop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    connect(&timeout, &QTimer::timeout, &shutdownLoop, &QEventLoop::quit);
+    connect(this, &CoreProcess::processStateChanged, &shutdownLoop, [&](ProcessState state) {
+      if (state == ProcessState::Stopped)
+        shutdownLoop.quit();
+    });
+    setProcessState(ProcessState::Stopping);
+    stopProcessFromDaemon();
+    if (m_processState != ProcessState::Stopped) {
+      timeout.start(3000);
+      shutdownLoop.exec();
+    }
+    if (m_processState != ProcessState::Stopped)
+      qWarning("could not deliver stop-sharing request to daemon before quitting");
   }
 }
 

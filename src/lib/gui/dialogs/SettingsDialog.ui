@@ -240,6 +240,16 @@
         </layout>
        </item>
        <item>
+        <widget class="QCheckBox" name="cbStopOnQuit">
+         <property name="text">
+          <string>Stop sharing when quitting Deskflow</string>
+         </property>
+         <property name="toolTip">
+          <string>Also stops sharing in service mode. Sending the window to the background does not quit. When unchecked, service-mode sharing may continue after quitting.</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QCheckBox" name="cbShowVersion">
          <property name="text">
           <string>Include version in the window title</string>

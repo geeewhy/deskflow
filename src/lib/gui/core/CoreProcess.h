@@ -26,6 +26,7 @@ class DaemonIpcClient;
 
 class CoreProcess : public QObject
 {
+  friend class CoreProcessTests;
   using ConnectionState = deskflow::core::ConnectionState;
   using ProcessMode = Settings::ProcessMode;
   using ProcessState = deskflow::core::ProcessState;

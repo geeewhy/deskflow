@@ -211,6 +211,7 @@ void IpcClient::sendMessage(const QString &message)
   }
 
   m_socket->write(message.toUtf8() + "\n");
+  m_socket->flush(); // Deliver commands even during final GUI cleanup.
   qDebug().noquote() << QStringLiteral("%1 ipc client sent message: %2").arg(m_typeName, message);
 }
 
